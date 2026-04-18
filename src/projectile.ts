@@ -14,7 +14,7 @@ export type Projectile = {
 
 export const FIREBALL_SPEED = 0.045;
 export const MISSILE_SPEED = 0.03;
-export const MISSILE_TURN_RATE = 0.002;
+export const MISSILE_TURN_RATE = 0.00125;
 
 const FIREBALL_CORE_R = 0.35;
 const FIREBALL_MID_R = 0.6;
@@ -63,7 +63,12 @@ function drawMissile(ctx: CanvasRenderingContext2D, p: Projectile) {
   ctx.fillStyle = "#aaa";
   ctx.fillRect(-half, -MISSILE_W / 2, bodyLen, MISSILE_W * 0.18);
   ctx.fillStyle = "#1a1a1a";
-  ctx.fillRect(-half + bodyLen * 0.25, -MISSILE_W * 0.08, bodyLen * 0.5, MISSILE_W * 0.16);
+  ctx.fillRect(
+    -half + bodyLen * 0.25,
+    -MISSILE_W * 0.08,
+    bodyLen * 0.5,
+    MISSILE_W * 0.16,
+  );
 
   ctx.fillStyle = "#e34040";
   ctx.beginPath();

@@ -419,6 +419,8 @@ function updateProjectiles(
       p.y = prevY + (newY - prevY) * wallT;
       p.alive = false;
       emitExplosion(particles, p);
+      if (p.kind === "fireball") Sound.sfx.fireballHit();
+      else Sound.sfx.missileHit();
       continue;
     }
 

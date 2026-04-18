@@ -355,4 +355,12 @@ export const sfx = {
   projectileWarn: () => {
     playTone(720, 0.06, "square", 0.07);
   },
+  fireballHit: () => {
+    playNoise(0.18, 1600, 0.3);
+    playBlip(260, 80, 0.2, "sawtooth", 0.15);
+  },
+  missileHit: () => {
+    playNoise(0.35, 900, 0.4);
+    playBlip(160, 45, 0.35, "sawtooth", 0.22);
+  },
 };
