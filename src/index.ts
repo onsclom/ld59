@@ -1,7 +1,8 @@
 import { startLoop } from "./game-loop";
 import * as Camera from "./camera";
 import * as Input from "./input";
-import * as Sound from "./sound";
+import * as Particles from "./particles";
+import * as Player from "./player";
 import { persistent } from "./hmr";
 
 let canvas = document.querySelector<HTMLCanvasElement>("canvas");
@@ -12,51 +13,69 @@ if (!canvas) {
 
 function createInitState() {
   return {
-    player: { x: 0, y: 0 },
+    player: Player.create(),
     camera: Camera.create(),
+    particles: Particles.create(1024),
   };
 }
 type State = ReturnType<typeof createInitState>;
 const state = persistent<State>("state", createInitState);
 
-const PLAYER_SIZE = 5;
-const PLAYER_SPEED = 0.1; // world-units per ms
+const GAME_SIZE = 100;
+const GRID_SPACING = 10;
+const GRID_DOT_RADIUS = 0.4;
 
 const stopLoop = startLoop(canvas, (ctx, dt) => {
-  let dx = 0;
-  let dy = 0;
-  if (Input.keysDown.has("w") || Input.keysDown.has("ArrowUp")) dy -= 1;
-  if (Input.keysDown.has("s") || Input.keysDown.has("ArrowDown")) dy += 1;
-  if (Input.keysDown.has("a") || Input.keysDown.has("ArrowLeft")) dx -= 1;
-  if (Input.keysDown.has("d") || Input.keysDown.has("ArrowRight")) dx += 1;
+  Player.update(state.player, state.particles, dt);
+  Particles.update(state.particles, dt);
 
-  if (dx !== 0 || dy !== 0) {
-    const len = Math.hypot(dx, dy);
-    state.player.x += (dx / len) * PLAYER_SPEED * dt;
-    state.player.y += (dy / len) * PLAYER_SPEED * dt;
-  }
-
-  if (Input.keysJustPressed.has(" ")) Sound.sfx.jump();
+  state.camera.x = state.player.x;
+  state.camera.y = state.player.y;
 
   const rect = ctx.canvas.getBoundingClientRect();
-  ctx.fillStyle = "#111";
-  ctx.fillRect(0, 0, rect.width, rect.height);
-
-  const GAME_SIZE = 100;
   state.camera.zoom = Camera.aspectFitZoom(rect, GAME_SIZE, GAME_SIZE);
 
-  Camera.drawWithCamera(ctx, state.camera, (ctx) => {
-    ctx.fillStyle = "#444";
-    ctx.fillRect(-GAME_SIZE / 2, -GAME_SIZE / 2, GAME_SIZE, GAME_SIZE);
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, rect.width, rect.height);
 
-    ctx.fillStyle = "#f0f";
-    ctx.fillRect(
-      state.player.x - PLAYER_SIZE / 2,
-      state.player.y - PLAYER_SIZE / 2,
-      PLAYER_SIZE,
-      PLAYER_SIZE,
-    );
+  const gameScreen = GAME_SIZE * state.camera.zoom;
+  const gameLeft = (rect.width - gameScreen) / 2;
+  const gameTop = (rect.height - gameScreen) / 2;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(gameLeft, gameTop, gameScreen, gameScreen);
+  ctx.clip();
+
+  ctx.fillStyle = "#111";
+  ctx.fillRect(gameLeft, gameTop, gameScreen, gameScreen);
+
+  Camera.drawWithCamera(ctx, state.camera, (ctx) => {
+    const halfView = GAME_SIZE / 2 + GRID_SPACING;
+    const minGX = Math.floor((state.camera.x - halfView) / GRID_SPACING);
+    const maxGX = Math.ceil((state.camera.x + halfView) / GRID_SPACING);
+    const minGY = Math.floor((state.camera.y - halfView) / GRID_SPACING);
+    const maxGY = Math.ceil((state.camera.y + halfView) / GRID_SPACING);
+    ctx.fillStyle = "#555";
+    for (let gx = minGX; gx <= maxGX; gx++) {
+      for (let gy = minGY; gy <= maxGY; gy++) {
+        ctx.beginPath();
+        ctx.arc(
+          gx * GRID_SPACING,
+          gy * GRID_SPACING,
+          GRID_DOT_RADIUS,
+          0,
+          Math.PI * 2,
+        );
+        ctx.fill();
+      }
+    }
+
+    Particles.draw(state.particles, ctx);
+    Player.draw(state.player, ctx);
   });
+
+  ctx.restore();
 
   Input.resetInput();
 });

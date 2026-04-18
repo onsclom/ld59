@@ -20,3 +20,7 @@ export function pingPong(value: number, min: number, max: number): number {
   const wrapped = mod(value - min, range * 2);
   return min + (wrapped < range ? wrapped : range * 2 - wrapped);
 }
+
+export function randRange(min: number, max: number): number {
+  return min + Math.random() * (max - min);
+}
