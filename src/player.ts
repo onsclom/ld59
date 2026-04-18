@@ -8,12 +8,12 @@ const THRUST = 0.00005;
 const GRAVITY = 0.00002;
 const DRAG = 0.0003;
 
-const THRUST_EMIT_INTERVAL = 5;
+const THRUST_EMIT_INTERVAL = 10;
 const SMOKE_TAIL_OFFSET = 0.7;
 const SMOKE_NOZZLE_JITTER = 0.5;
 const SMOKE_SPREAD_ANGLE = Math.PI * 2;
 const SMOKE_SPEED_MIN = 0.0;
-const SMOKE_SPEED_MAX = 0.006;
+const SMOKE_SPEED_MAX = 0.003;
 const SMOKE_LIFE_MIN = 1000;
 const SMOKE_LIFE_MAX = 2000;
 const SMOKE_SIZE_MIN = 0.5;
@@ -30,14 +30,12 @@ const WINDOW_H_FRAC = 0.28;
 const WINDOW_HIGHLIGHT_TOP_FRAC = 0.1;
 const WINDOW_HIGHLIGHT_W_FRAC = 0.35;
 const WINDOW_HIGHLIGHT_H_FRAC = 0.2;
-const OUTLINE_W = 0.15;
 
 const COLOR_BODY = "#fff";
 const COLOR_WINDOW = "#4aa8ff";
 const COLOR_WINDOW_HIGHLIGHT = "#cfe7ff";
 const COLOR_NOZZLE_OUTER = "#555";
 const COLOR_NOZZLE_INNER = "#222";
-const COLOR_OUTLINE = "#0f0";
 const COLOR_FLAME = "rgba(255, 150, 30, 0.95)";
 const COLOR_DEAD_OVERLAY = "rgba(255, 40, 40, 0.55)";
 
@@ -196,10 +194,6 @@ export function draw(player: Player, ctx: CanvasRenderingContext2D) {
     winW * WINDOW_HIGHLIGHT_W_FRAC,
     winH * WINDOW_HIGHLIGHT_H_FRAC,
   );
-
-  ctx.strokeStyle = COLOR_OUTLINE;
-  ctx.lineWidth = OUTLINE_W;
-  ctx.strokeRect(-w / 2, -h / 2, w, h);
 
   if (player.thrusting) {
     const flicker = Math.sin(performance.now() / FLAME_FLICKER_PERIOD_MS);

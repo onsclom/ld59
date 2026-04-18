@@ -4,6 +4,21 @@ import * as Satellite from "./satellite";
 
 export type Wall = { x1: number; y1: number; x2: number; y2: number };
 export type Point = { x: number; y: number };
+export type LevelData = {
+  walls: Wall[];
+  satellites: Satellite.Satellite[];
+};
+
+export const NODE_RADIUS = 10;
+export const NODE_COMPLETE_TIME_MS = 1500;
+
+function createDynamic() {
+  return {
+    nodeProgress: {} as Record<number, number>,
+    completedNodes: new Set<number>(),
+    won: false,
+  };
+}
 
 export function create() {
   return {
@@ -11,28 +26,52 @@ export function create() {
     satellites: [] as Satellite.Satellite[],
     perimeter: null as Point[] | null,
     dirty: true,
+    dynamic: createDynamic(),
   };
 }
 
 type Level = ReturnType<typeof create>;
 type PlayerT = ReturnType<typeof Player.create>;
 
+export function resetDynamic(level: Level) {
+  level.dynamic = createDynamic();
+}
+
+export function toData(level: Level): LevelData {
+  return {
+    walls: level.walls.map((w) => ({ ...w })),
+    satellites: level.satellites.map((s) => ({ ...s })),
+  };
+}
+
+export function fromData(data: LevelData): Level {
+  const level = create();
+  level.walls = data.walls.map((w) => ({ ...w }));
+  level.satellites = data.satellites.map((s) => ({ ...s }));
+  level.dirty = true;
+  return level;
+}
+
 export function addWall(level: Level, wall: Wall) {
   level.walls.push(wall);
   level.dirty = true;
+  resetDynamic(level);
 }
 
 export function removeWallAt(level: Level, idx: number) {
   level.walls.splice(idx, 1);
   level.dirty = true;
+  resetDynamic(level);
 }
 
 export function addSatellite(level: Level, sat: Satellite.Satellite) {
   level.satellites.push(sat);
+  resetDynamic(level);
 }
 
 export function removeSatelliteAt(level: Level, idx: number) {
   level.satellites.splice(idx, 1);
+  resetDynamic(level);
 }
 
 function vkey(x: number, y: number) {
@@ -151,6 +190,60 @@ export function hitsPlayer(level: Level, player: PlayerT) {
   return false;
 }
 
+function losClear(
+  level: Level,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+) {
+  for (const w of level.walls) {
+    if (segmentsIntersect(x1, y1, x2, y2, w.x1, w.y1, w.x2, w.y2)) return false;
+  }
+  return true;
+}
+
+function nodeIndices(level: Level): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < level.satellites.length; i++) {
+    if (level.satellites[i]!.type === "transmission-node") out.push(i);
+  }
+  return out;
+}
+
+export function totalNodes(level: Level) {
+  return nodeIndices(level).length;
+}
+
+export function remainingNodes(level: Level) {
+  return totalNodes(level) - level.dynamic.completedNodes.size;
+}
+
+export function update(level: Level, player: PlayerT, dt: number) {
+  if (!player.alive || level.dynamic.won) return;
+  const indices = nodeIndices(level);
+  for (const i of indices) {
+    if (level.dynamic.completedNodes.has(i)) continue;
+    const sat = level.satellites[i]!;
+    const d = Math.hypot(player.x - sat.x, player.y - sat.y);
+    const transmitting =
+      d <= NODE_RADIUS && losClear(level, player.x, player.y, sat.x, sat.y);
+    if (transmitting) {
+      const next = (level.dynamic.nodeProgress[i] ?? 0) + dt;
+      level.dynamic.nodeProgress[i] = next;
+      if (next >= NODE_COMPLETE_TIME_MS) level.dynamic.completedNodes.add(i);
+    } else {
+      level.dynamic.nodeProgress[i] = 0;
+    }
+  }
+  if (
+    indices.length > 0 &&
+    level.dynamic.completedNodes.size === indices.length
+  ) {
+    level.dynamic.won = true;
+  }
+}
+
 export function fillOutside(level: Level, ctx: CanvasRenderingContext2D) {
   const poly = getPerimeter(level);
   if (!poly || poly.length < 3) return;
@@ -173,8 +266,67 @@ export function draw(level: Level, ctx: CanvasRenderingContext2D) {
     ctx.lineTo(w.x2, w.y2);
     ctx.stroke();
   }
-  for (const sat of level.satellites) {
+  for (let i = 0; i < level.satellites.length; i++) {
+    const sat = level.satellites[i]!;
+    const faded =
+      sat.type === "transmission-node" && level.dynamic.completedNodes.has(i);
+    if (faded) ctx.globalAlpha = 0.25;
     Satellite.draw(ctx, sat);
+    if (faded) ctx.globalAlpha = 1;
+  }
+}
+
+const NODE_RING_COLOR = "rgba(74, 224, 160, 0.35)";
+const NODE_RING_DONE_COLOR = "rgba(74, 224, 160, 0.12)";
+const NODE_PROGRESS_COLOR = "#9cffcf";
+const NODE_LINK_COLOR = "rgba(156, 255, 207, 0.85)";
+
+export function drawTransmissionFX(
+  level: Level,
+  player: PlayerT,
+  ctx: CanvasRenderingContext2D,
+) {
+  for (let i = 0; i < level.satellites.length; i++) {
+    const sat = level.satellites[i]!;
+    if (sat.type !== "transmission-node") continue;
+    const completed = level.dynamic.completedNodes.has(i);
+
+    ctx.strokeStyle = completed ? NODE_RING_DONE_COLOR : NODE_RING_COLOR;
+    ctx.lineWidth = 0.15;
+    ctx.setLineDash([0.6, 0.6]);
+    ctx.beginPath();
+    ctx.arc(sat.x, sat.y, NODE_RADIUS, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    if (completed) continue;
+
+    const progress = level.dynamic.nodeProgress[i] ?? 0;
+    if (progress > 0) {
+      const frac = Math.min(progress / NODE_COMPLETE_TIME_MS, 1);
+      ctx.strokeStyle = NODE_PROGRESS_COLOR;
+      ctx.lineWidth = 0.4;
+      ctx.beginPath();
+      ctx.arc(
+        sat.x,
+        sat.y,
+        NODE_RADIUS,
+        -Math.PI / 2,
+        -Math.PI / 2 + frac * Math.PI * 2,
+      );
+      ctx.stroke();
+    }
+
+    if (!player.alive) continue;
+    const d = Math.hypot(player.x - sat.x, player.y - sat.y);
+    if (d <= NODE_RADIUS && losClear(level, player.x, player.y, sat.x, sat.y)) {
+      ctx.strokeStyle = NODE_LINK_COLOR;
+      ctx.lineWidth = 0.15;
+      ctx.beginPath();
+      ctx.moveTo(sat.x, sat.y);
+      ctx.lineTo(player.x, player.y);
+      ctx.stroke();
+    }
   }
 }
 

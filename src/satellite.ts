@@ -2,7 +2,7 @@ export type SatelliteType =
   | "turn-inhibitor"
   | "thrust-inhibitor"
   | "control-reverser"
-  | "transmission-bay";
+  | "transmission-node";
 
 export type Satellite = { x: number; y: number; type: SatelliteType };
 
@@ -18,7 +18,6 @@ const ANTENNA_DISH_R = 0.18;
 const SOLAR_STRIP_H = 0.5;
 const SOLAR_STRIP_INSET = 0.15;
 const PANEL_LINE_W = 0.05;
-const OUTLINE_W = 0.1;
 
 const TX_BODY_W = 2.2;
 const TX_BODY_H = 2.2;
@@ -32,7 +31,6 @@ const COLOR_BODY_DEFAULT = "#bbb";
 const COLOR_SOLAR_STRIP = "#444";
 const COLOR_PANEL = "#1a3a6e";
 const COLOR_PANEL_GRID = "#4a7fc8";
-const COLOR_OUTLINE_DEFAULT = "#0f0";
 const COLOR_ANTENNA = "#888";
 
 const COLOR_TURN = "#e07a2a";
@@ -47,21 +45,21 @@ export const TYPES: readonly SatelliteType[] = [
   "turn-inhibitor",
   "thrust-inhibitor",
   "control-reverser",
-  "transmission-bay",
+  "transmission-node",
 ];
 
 export const TYPE_LABELS: Record<SatelliteType, string> = {
   "turn-inhibitor": "Turn Inhibitor",
   "thrust-inhibitor": "Thrust Inhibitor",
   "control-reverser": "Control Reverser",
-  "transmission-bay": "Transmission Bay",
+  "transmission-node": "Transmission Node",
 };
 
 export const TYPE_COLORS: Record<SatelliteType, string> = {
   "turn-inhibitor": COLOR_TURN,
   "thrust-inhibitor": COLOR_THRUST,
   "control-reverser": COLOR_REVERSE,
-  "transmission-bay": COLOR_TX_BODY,
+  "transmission-node": COLOR_TX_BODY,
 };
 
 export function create(x: number, y: number, type: SatelliteType): Satellite {
@@ -71,7 +69,7 @@ export function create(x: number, y: number, type: SatelliteType): Satellite {
 export function draw(ctx: CanvasRenderingContext2D, sat: Satellite) {
   ctx.save();
   ctx.translate(sat.x, sat.y);
-  if (sat.type === "transmission-bay") drawTransmissionBay(ctx);
+  if (sat.type === "transmission-node") drawTransmissionNode(ctx);
   else drawStandard(ctx, TYPE_COLORS[sat.type]);
   ctx.restore();
 }
@@ -96,10 +94,6 @@ function drawStandard(ctx: CanvasRenderingContext2D, bodyColor: string) {
     BODY_W - SOLAR_STRIP_INSET * 2,
     SOLAR_STRIP_H,
   );
-  ctx.strokeStyle = COLOR_OUTLINE_DEFAULT;
-  ctx.lineWidth = OUTLINE_W;
-  ctx.strokeRect(-BODY_W / 2, -BODY_H / 2, BODY_W, BODY_H);
-
   ctx.fillStyle = COLOR_ANTENNA;
   ctx.fillRect(-ARM_THICKNESS / 2, -BODY_H / 2 - ANTENNA_H, ARM_THICKNESS, ANTENNA_H);
   ctx.beginPath();
@@ -125,7 +119,7 @@ function drawPanel(ctx: CanvasRenderingContext2D, left: number) {
   ctx.stroke();
 }
 
-function drawTransmissionBay(ctx: CanvasRenderingContext2D) {
+function drawTransmissionNode(ctx: CanvasRenderingContext2D) {
   ctx.fillStyle = COLOR_TX_DISH;
   ctx.beginPath();
   ctx.arc(0, -TX_DISH_OFFSET, TX_DISH_R, Math.PI, Math.PI * 2);
@@ -137,9 +131,6 @@ function drawTransmissionBay(ctx: CanvasRenderingContext2D) {
 
   ctx.fillStyle = COLOR_TX_BODY;
   ctx.fillRect(-TX_BODY_W / 2, -TX_BODY_H / 2, TX_BODY_W, TX_BODY_H);
-  ctx.strokeStyle = COLOR_OUTLINE_DEFAULT;
-  ctx.lineWidth = OUTLINE_W;
-  ctx.strokeRect(-TX_BODY_W / 2, -TX_BODY_H / 2, TX_BODY_W, TX_BODY_H);
 
   const pulse = 0.6 + 0.4 * Math.sin(performance.now() / 400);
   ctx.fillStyle = COLOR_TX_PULSE;

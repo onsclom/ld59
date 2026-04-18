@@ -4,7 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "bun src/index.html",
+    "dev": "bun --hot server.ts",
     "build": "bun build ./src/index.html --outdir=./dist --minify",
     "preview": "bun dist/index.html"
   },

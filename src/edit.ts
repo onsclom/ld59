@@ -8,14 +8,20 @@ const MOVE_SPEED = 0.05;
 const GRID_SIZE = 10;
 const DELETE_RADIUS = 2;
 const SATELLITE_DELETE_RADIUS = 2.5;
+const VERTEX_GRAB_RADIUS = 2;
 
-type Mode = "wall" | Satellite.SatelliteType;
+type Mode = "wall" | Satellite.SatelliteType | "move";
 
-const MODES: readonly Mode[] = ["wall", ...Satellite.TYPES];
+const MODES: readonly Mode[] = ["wall", ...Satellite.TYPES, "move"];
 const MODE_LABELS: Record<Mode, string> = {
   wall: "Wall",
   ...Satellite.TYPE_LABELS,
+  move: "Move",
 };
+
+type DragTarget =
+  | { kind: "satellite"; idx: number }
+  | { kind: "vertex"; endpoints: { idx: number; which: 1 | 2 }[] };
 
 export function create() {
   return {
@@ -24,6 +30,7 @@ export function create() {
     cameraY: 0,
     pendingStart: null as { x: number; y: number } | null,
     mode: "wall" as Mode,
+    drag: null as DragTarget | null,
   };
 }
 
@@ -77,6 +84,43 @@ function nearestWallIndex(level: LevelT, x: number, y: number, maxDist: number) 
   return best;
 }
 
+function nearestVertex(
+  level: LevelT,
+  x: number,
+  y: number,
+  maxDist: number,
+): { x: number; y: number } | null {
+  let bestDist = maxDist;
+  let best: { x: number; y: number } | null = null;
+  for (const w of level.walls) {
+    const d1 = Math.hypot(x - w.x1, y - w.y1);
+    if (d1 < bestDist) {
+      bestDist = d1;
+      best = { x: w.x1, y: w.y1 };
+    }
+    const d2 = Math.hypot(x - w.x2, y - w.y2);
+    if (d2 < bestDist) {
+      bestDist = d2;
+      best = { x: w.x2, y: w.y2 };
+    }
+  }
+  return best;
+}
+
+function collectEndpointsAt(
+  level: LevelT,
+  x: number,
+  y: number,
+): { idx: number; which: 1 | 2 }[] {
+  const out: { idx: number; which: 1 | 2 }[] = [];
+  for (let i = 0; i < level.walls.length; i++) {
+    const w = level.walls[i]!;
+    if (w.x1 === x && w.y1 === y) out.push({ idx: i, which: 1 });
+    if (w.x2 === x && w.y2 === y) out.push({ idx: i, which: 2 });
+  }
+  return out;
+}
+
 export function update(
   edit: EditState,
   level: LevelT,
@@ -91,6 +135,7 @@ export function update(
     if (Input.keysJustPressed.has(String(i + 1))) {
       edit.mode = MODES[i]!;
       edit.pendingStart = null;
+      edit.drag = null;
     }
   }
 
@@ -113,7 +158,10 @@ export function update(
   player.vy = 0;
   player.alive = true;
 
-  if (Input.keysJustPressed.has("Escape")) edit.pendingStart = null;
+  if (Input.keysJustPressed.has("Escape")) {
+    edit.pendingStart = null;
+    edit.drag = null;
+  }
 
   if (edit.mode === "wall") {
     if (Input.mouse.justLeftClicked && Input.mouse.onCanvas) {
@@ -130,6 +178,56 @@ export function update(
         });
       }
       edit.pendingStart = null;
+    }
+  } else if (edit.mode === "move") {
+    if (Input.mouse.justLeftClicked && Input.mouse.onCanvas) {
+      const world = Camera.screenToWorld(
+        Input.mouse.x,
+        Input.mouse.y,
+        canvasRect,
+        camera,
+      );
+      const satIdx = Level.nearestSatelliteIndex(
+        level,
+        world.x,
+        world.y,
+        SATELLITE_DELETE_RADIUS,
+      );
+      if (satIdx >= 0) {
+        edit.drag = { kind: "satellite", idx: satIdx };
+      } else {
+        const v = nearestVertex(level, world.x, world.y, VERTEX_GRAB_RADIUS);
+        if (v) {
+          edit.drag = {
+            kind: "vertex",
+            endpoints: collectEndpointsAt(level, v.x, v.y),
+          };
+        }
+      }
+    }
+    if (edit.drag && Input.mouse.leftClickDown) {
+      const c = cursorWorld(canvasRect, camera);
+      if (edit.drag.kind === "satellite") {
+        const s = level.satellites[edit.drag.idx]!;
+        s.x = c.x;
+        s.y = c.y;
+      } else {
+        for (const ep of edit.drag.endpoints) {
+          const w = level.walls[ep.idx]!;
+          if (ep.which === 1) {
+            w.x1 = c.x;
+            w.y1 = c.y;
+          } else {
+            w.x2 = c.x;
+            w.y2 = c.y;
+          }
+        }
+        level.dirty = true;
+      }
+    }
+    if (Input.mouse.justLeftReleased && edit.drag) {
+      Level.resetDynamic(level);
+      edit.drag = null;
     }
   } else {
     if (Input.mouse.justLeftClicked && Input.mouse.onCanvas) {
@@ -180,7 +278,46 @@ export function drawWorld(
     world.y,
     SATELLITE_DELETE_RADIUS,
   );
-  if (hoverSatIdx >= 0) {
+
+  if (edit.mode === "move") {
+    const seen = new Set<string>();
+    ctx.fillStyle = "rgba(255, 220, 60, 0.8)";
+    for (const w of level.walls) {
+      for (const p of [{ x: w.x1, y: w.y1 }, { x: w.x2, y: w.y2 }]) {
+        const k = `${p.x}|${p.y}`;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 0.55, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    if (edit.drag?.kind === "satellite") {
+      const s = level.satellites[edit.drag.idx]!;
+      ctx.strokeStyle = "#ff0";
+      ctx.lineWidth = 0.2;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, SATELLITE_DELETE_RADIUS, 0, Math.PI * 2);
+      ctx.stroke();
+    } else if (hoverSatIdx >= 0) {
+      const s = level.satellites[hoverSatIdx]!;
+      ctx.strokeStyle = "#ff0";
+      ctx.lineWidth = 0.2;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, SATELLITE_DELETE_RADIUS, 0, Math.PI * 2);
+      ctx.stroke();
+    } else {
+      const hv = nearestVertex(level, world.x, world.y, VERTEX_GRAB_RADIUS);
+      if (hv) {
+        ctx.strokeStyle = "#ff0";
+        ctx.lineWidth = 0.2;
+        ctx.beginPath();
+        ctx.arc(hv.x, hv.y, 1.2, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+  } else if (hoverSatIdx >= 0) {
     const s = level.satellites[hoverSatIdx]!;
     ctx.strokeStyle = "#f44";
     ctx.lineWidth = 0.2;
@@ -220,7 +357,7 @@ export function drawWorld(
     ctx.beginPath();
     ctx.arc(c.x, c.y, 0.8, 0, Math.PI * 2);
     ctx.stroke();
-  } else {
+  } else if (edit.mode !== "move") {
     ctx.globalAlpha = 0.5;
     Satellite.draw(ctx, { x: c.x, y: c.y, type: edit.mode });
     ctx.globalAlpha = 1;
@@ -237,15 +374,17 @@ export function drawHUD(edit: EditState, ctx: CanvasRenderingContext2D) {
   if (!edit.active) return;
   ctx.save();
   ctx.fillStyle = "rgba(0,0,0,0.7)";
-  ctx.fillRect(10, 10, 260, 160);
+  ctx.fillRect(10, 10, 260, 200);
   ctx.fillStyle = "#0f0";
   ctx.font = "14px monospace";
   const lines = [
     "EDIT MODE",
-    "E         exit",
+    "Shift     exit",
     "WASD      fly (noclip)",
-    "1-5       select tool",
-    "L-Click   place",
+    "Q / E     prev / next level",
+    "Cmd+S     save levels",
+    "1-6       select tool",
+    "L-Click   place / drag",
     "R-Hold    delete",
     "Esc       cancel pending",
   ];
@@ -268,7 +407,7 @@ export function drawHUD(edit: EditState, ctx: CanvasRenderingContext2D) {
     ctx.strokeRect(x, baseY, HOTBAR_SLOT_W, HOTBAR_SLOT_H);
 
     const swatchColor =
-      m === "wall" ? "#fff" : Satellite.TYPE_COLORS[m];
+      m === "wall" ? "#fff" : m === "move" ? "#ff0" : Satellite.TYPE_COLORS[m];
     ctx.fillStyle = swatchColor;
     ctx.fillRect(x + 8, baseY + 10, 20, 20);
 
