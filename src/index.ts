@@ -5,6 +5,8 @@ import * as Input from "./input";
 import * as Level from "./level";
 import * as Particles from "./particles";
 import * as Player from "./player";
+import * as Satellite from "./satellite";
+import * as Sound from "./sound";
 import { persistent } from "./hmr";
 
 let canvas = document.querySelector<HTMLCanvasElement>("canvas");
@@ -25,6 +27,8 @@ function createInitState() {
 type State = ReturnType<typeof createInitState>;
 const state = persistent<State>("state", createInitState);
 
+let wasThrusting = false;
+
 const GAME_SIZE = 100;
 const GRID_SPACING = 10;
 const GRID_DOT_RADIUS = 0.4;
@@ -43,6 +47,7 @@ const stopLoop = startLoop(canvas, (ctx, dt) => {
   }
 
   if (state.edit.active) {
+    state.player.thrusting = false;
     Edit.update(
       state.edit,
       state.level,
@@ -62,6 +67,11 @@ const stopLoop = startLoop(canvas, (ctx, dt) => {
     state.camera.x = state.player.x;
     state.camera.y = state.player.y;
   }
+
+  if (state.player.thrusting && !wasThrusting) Sound.thruster.start();
+  else if (!state.player.thrusting && wasThrusting) Sound.thruster.stop();
+  wasThrusting = state.player.thrusting;
+
   Particles.update(state.particles, dt);
 
   ctx.fillStyle = "#000";
@@ -102,6 +112,7 @@ const stopLoop = startLoop(canvas, (ctx, dt) => {
 
     Level.fillOutside(state.level, ctx);
     Level.draw(state.level, ctx);
+    Satellite.draw(ctx, 0, 0);
     Particles.draw(state.particles, ctx);
     if (state.edit.active) ctx.globalAlpha = 0.3;
     Player.draw(state.player, ctx);

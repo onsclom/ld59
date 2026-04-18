@@ -19,6 +19,34 @@ const SMOKE_LIFE_MAX = 2000;
 const SMOKE_SIZE_MIN = 0.5;
 const SMOKE_SIZE_MAX = 1;
 
+const NOZZLE_W_FRAC = 0.9;
+const NOZZLE_H_FRAC = 0.18;
+const NOZZLE_OVERLAP = 0.05;
+const NOZZLE_INNER_W_FRAC = 0.8;
+const NOZZLE_INNER_H_FRAC = 0.45;
+const WINDOW_INSET_FRAC = 0.18;
+const WINDOW_TOP_FRAC = 0.15;
+const WINDOW_H_FRAC = 0.28;
+const WINDOW_HIGHLIGHT_TOP_FRAC = 0.1;
+const WINDOW_HIGHLIGHT_W_FRAC = 0.35;
+const WINDOW_HIGHLIGHT_H_FRAC = 0.2;
+const OUTLINE_W = 0.15;
+
+const COLOR_BODY = "#fff";
+const COLOR_WINDOW = "#4aa8ff";
+const COLOR_WINDOW_HIGHLIGHT = "#cfe7ff";
+const COLOR_NOZZLE_OUTER = "#555";
+const COLOR_NOZZLE_INNER = "#222";
+const COLOR_OUTLINE = "#0f0";
+const COLOR_FLAME = "rgba(255, 150, 30, 0.95)";
+const COLOR_DEAD_OVERLAY = "rgba(255, 40, 40, 0.55)";
+
+const FLAME_BASE_HALF = 0.45;
+const FLAME_BASE_FLICKER = 0.08;
+const FLAME_LENGTH = 1.3;
+const FLAME_LENGTH_FLICKER = 0.2;
+const FLAME_FLICKER_PERIOD_MS = 25;
+
 export function create() {
   return {
     x: 0,
@@ -31,6 +59,7 @@ export function create() {
     thrustEmitAccum: 0,
     alive: true,
     hasThrusted: false,
+    thrusting: false,
   };
 }
 
@@ -46,6 +75,7 @@ export function reset(player: Player) {
   player.thrustEmitAccum = 0;
   player.alive = true;
   player.hasThrusted = false;
+  player.thrusting = false;
 }
 
 export function corners(player: Player) {
@@ -66,17 +96,19 @@ export function corners(player: Player) {
 }
 
 export function update(player: Player, particles: ParticleSystem, dt: number) {
+  player.thrusting =
+    player.alive &&
+    (Input.keysDown.has("w") ||
+      Input.keysDown.has("ArrowUp") ||
+      Input.keysDown.has(" "));
+
   if (!player.alive) return;
   let turn = 0;
   if (Input.keysDown.has("a") || Input.keysDown.has("ArrowLeft")) turn -= 1;
   if (Input.keysDown.has("d") || Input.keysDown.has("ArrowRight")) turn += 1;
   player.rotation += turn * TURN_RATE * dt;
 
-  const thrusting =
-    Input.keysDown.has("w") ||
-    Input.keysDown.has("ArrowUp") ||
-    Input.keysDown.has(" ");
-  if (thrusting) {
+  if (player.thrusting) {
     const fx = Math.sin(player.rotation);
     const fy = -Math.cos(player.rotation);
     player.vx += fx * THRUST * dt;
@@ -93,7 +125,7 @@ export function update(player: Player, particles: ParticleSystem, dt: number) {
   player.x += player.vx * dt;
   player.y += player.vy * dt;
 
-  if (thrusting) {
+  if (player.thrusting) {
     player.thrustEmitAccum += dt;
     const sinR = Math.sin(player.rotation);
     const cosR = Math.cos(player.rotation);
@@ -135,35 +167,56 @@ export function draw(player: Player, ctx: CanvasRenderingContext2D) {
   ctx.translate(player.x, player.y);
   ctx.rotate(player.rotation);
 
-  ctx.fillStyle = "#555";
-  const nozW = w * 0.9;
-  const nozH = h * 0.18;
-  ctx.fillRect(-nozW / 2, h / 2 - 0.05, nozW, nozH);
-  ctx.fillStyle = "#222";
-  ctx.fillRect(-nozW * 0.4, h / 2 + nozH * 0.5, nozW * 0.8, nozH * 0.45);
+  const nozW = w * NOZZLE_W_FRAC;
+  const nozH = h * NOZZLE_H_FRAC;
 
-  ctx.fillStyle = "#fff";
-  ctx.fillRect(-w / 2, -h / 2, w, h);
-
-  ctx.fillStyle = "#4aa8ff";
-  const winInset = w * 0.18;
-  const winTop = -h / 2 + h * 0.15;
-  const winH = h * 0.28;
-  ctx.fillRect(-w / 2 + winInset, winTop, w - winInset * 2, winH);
-  ctx.fillStyle = "#cfe7ff";
+  ctx.fillStyle = COLOR_NOZZLE_OUTER;
+  ctx.fillRect(-nozW / 2, h / 2 - NOZZLE_OVERLAP, nozW, nozH);
+  ctx.fillStyle = COLOR_NOZZLE_INNER;
   ctx.fillRect(
-    -w / 2 + winInset,
-    winTop + winH * 0.1,
-    (w - winInset * 2) * 0.35,
-    winH * 0.2,
+    (-nozW * NOZZLE_INNER_W_FRAC) / 2,
+    h / 2 + nozH / 2,
+    nozW * NOZZLE_INNER_W_FRAC,
+    nozH * NOZZLE_INNER_H_FRAC,
   );
 
-  ctx.strokeStyle = "#0f0";
-  ctx.lineWidth = 0.15;
+  ctx.fillStyle = COLOR_BODY;
+  ctx.fillRect(-w / 2, -h / 2, w, h);
+
+  const winInset = w * WINDOW_INSET_FRAC;
+  const winTop = -h / 2 + h * WINDOW_TOP_FRAC;
+  const winW = w - winInset * 2;
+  const winH = h * WINDOW_H_FRAC;
+  ctx.fillStyle = COLOR_WINDOW;
+  ctx.fillRect(-w / 2 + winInset, winTop, winW, winH);
+  ctx.fillStyle = COLOR_WINDOW_HIGHLIGHT;
+  ctx.fillRect(
+    -w / 2 + winInset,
+    winTop + winH * WINDOW_HIGHLIGHT_TOP_FRAC,
+    winW * WINDOW_HIGHLIGHT_W_FRAC,
+    winH * WINDOW_HIGHLIGHT_H_FRAC,
+  );
+
+  ctx.strokeStyle = COLOR_OUTLINE;
+  ctx.lineWidth = OUTLINE_W;
   ctx.strokeRect(-w / 2, -h / 2, w, h);
 
+  if (player.thrusting) {
+    const flicker = Math.sin(performance.now() / FLAME_FLICKER_PERIOD_MS);
+    const baseY = h / 2 + nozH;
+    const halfBase = FLAME_BASE_HALF + FLAME_BASE_FLICKER * flicker;
+    const tipY = baseY + FLAME_LENGTH + FLAME_LENGTH_FLICKER * flicker;
+    ctx.fillStyle = COLOR_FLAME;
+    ctx.beginPath();
+    ctx.moveTo(-halfBase, baseY);
+    ctx.lineTo(halfBase, baseY);
+    ctx.lineTo(0, tipY);
+    ctx.closePath();
+    ctx.fill();
+  }
+
   if (!player.alive) {
-    ctx.fillStyle = "rgba(255, 40, 40, 0.55)";
+    ctx.fillStyle = COLOR_DEAD_OVERLAY;
     ctx.fillRect(-w / 2, -h / 2, w, h);
   }
 

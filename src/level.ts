@@ -154,7 +154,7 @@ export function fillOutside(level: Level, ctx: CanvasRenderingContext2D) {
 }
 
 export function draw(level: Level, ctx: CanvasRenderingContext2D) {
-  ctx.strokeStyle = "red";
+  ctx.strokeStyle = "white";
   ctx.lineWidth = 0.4;
   ctx.lineCap = "round";
   for (const w of level.walls) {

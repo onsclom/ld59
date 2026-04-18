@@ -118,6 +118,89 @@ export function playNoise(
   src.stop(t0 + duration + 0.02);
 }
 
+export type Thruster = { start: () => void; stop: () => void };
+
+export function createThruster(opts?: {
+  volume?: number;
+  attack?: number;
+  release?: number;
+  cutoff?: number;
+}): Thruster {
+  const volume = opts?.volume ?? 0.35;
+  const attack = opts?.attack ?? 0.08;
+  const release = opts?.release ?? 0.2;
+  const cutoff = opts?.cutoff ?? 900;
+
+  const c = getCtx();
+
+  const frames = Math.floor(c.sampleRate * 2);
+  const buffer = c.createBuffer(1, frames, c.sampleRate);
+  const data = buffer.getChannelData(0);
+  let last = 0;
+  for (let i = 0; i < frames; i++) {
+    const white = Math.random() * 2 - 1;
+    last = (last + 0.02 * white) / 1.02;
+    data[i] = last * 3.5;
+  }
+
+  const src = c.createBufferSource();
+  src.buffer = buffer;
+  src.loop = true;
+
+  const lowpass = c.createBiquadFilter();
+  lowpass.type = "lowpass";
+  lowpass.frequency.value = cutoff;
+  lowpass.Q.value = 0.7;
+
+  const bandpass = c.createBiquadFilter();
+  bandpass.type = "bandpass";
+  bandpass.frequency.value = 1600;
+  bandpass.Q.value = 1.2;
+  const air = c.createGain();
+  air.gain.value = 0.2;
+
+  const lfo = c.createOscillator();
+  lfo.frequency.value = 6.5;
+  const lfoGain = c.createGain();
+  lfoGain.gain.value = cutoff * 0.1;
+  lfo.connect(lfoGain).connect(lowpass.frequency);
+
+  const env = c.createGain();
+  env.gain.value = 0;
+
+  src.connect(lowpass).connect(env);
+  src.connect(bandpass).connect(air).connect(env);
+  env.connect(getMaster());
+
+  src.start();
+  lfo.start();
+
+  return {
+    start() {
+      const t = c.currentTime;
+      env.gain.cancelScheduledValues(t);
+      env.gain.setValueAtTime(env.gain.value, t);
+      env.gain.linearRampToValueAtTime(volume, t + attack);
+    },
+    stop() {
+      const t = c.currentTime;
+      env.gain.cancelScheduledValues(t);
+      env.gain.setValueAtTime(env.gain.value, t);
+      env.gain.linearRampToValueAtTime(0, t + release);
+    },
+  };
+}
+
+let _thruster: Thruster | null = null;
+function getThruster(): Thruster {
+  if (!_thruster) _thruster = createThruster();
+  return _thruster;
+}
+export const thruster = {
+  start: () => getThruster().start(),
+  stop: () => getThruster().stop(),
+};
+
 // Convenience presets you'll actually reach for during a jam.
 export const sfx = {
   jump: () => playBlip(300, 900, 0.12, "square", 0.15),
