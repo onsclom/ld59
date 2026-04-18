@@ -201,12 +201,93 @@ export const thruster = {
   stop: () => getThruster().stop(),
 };
 
+export function createTone(opts: {
+  freq: number;
+  wave?: Wave;
+  volume?: number;
+  attack?: number;
+  release?: number;
+  vibratoHz?: number;
+  vibratoDepth?: number;
+}): Thruster {
+  const c = getCtx();
+  const osc = c.createOscillator();
+  osc.type = opts.wave ?? "sine";
+  osc.frequency.value = opts.freq;
+
+  const env = c.createGain();
+  env.gain.value = 0;
+  osc.connect(env).connect(getMaster());
+  osc.start();
+
+  let lfo: OscillatorNode | null = null;
+  if (opts.vibratoHz && opts.vibratoDepth) {
+    lfo = c.createOscillator();
+    lfo.frequency.value = opts.vibratoHz;
+    const lfoGain = c.createGain();
+    lfoGain.gain.value = opts.vibratoDepth;
+    lfo.connect(lfoGain).connect(osc.frequency);
+    lfo.start();
+  }
+
+  const attack = opts.attack ?? 0.05;
+  const release = opts.release ?? 0.1;
+  const volume = opts.volume ?? 0.1;
+
+  return {
+    start() {
+      const t = c.currentTime;
+      env.gain.cancelScheduledValues(t);
+      env.gain.setValueAtTime(env.gain.value, t);
+      env.gain.linearRampToValueAtTime(volume, t + attack);
+    },
+    stop() {
+      const t = c.currentTime;
+      env.gain.cancelScheduledValues(t);
+      env.gain.setValueAtTime(env.gain.value, t);
+      env.gain.linearRampToValueAtTime(0, t + release);
+    },
+  };
+}
+
+let _transmission: Thruster | null = null;
+function getTransmission(): Thruster {
+  if (!_transmission)
+    _transmission = createTone({
+      freq: 520,
+      wave: "triangle",
+      volume: 0.09,
+      attack: 0.03,
+      release: 0.08,
+      vibratoHz: 7,
+      vibratoDepth: 8,
+    });
+  return _transmission;
+}
+export const transmission = {
+  start: () => getTransmission().start(),
+  stop: () => getTransmission().stop(),
+};
+
 // Convenience presets you'll actually reach for during a jam.
 export const sfx = {
   jump: () => playBlip(300, 900, 0.12, "square", 0.15),
   pickup: () => playBlip(600, 1200, 0.08, "triangle", 0.2),
   hit: () => playNoise(0.15, 1200, 0.35),
-  explode: () => playNoise(0.5, 600, 0.4),
+  explode: () => {
+    playNoise(0.7, 500, 0.5);
+    playBlip(180, 40, 0.6, "sawtooth", 0.25);
+  },
   select: () => playTone(660, 0.06, "sine", 0.18),
   deny: () => playBlip(400, 120, 0.2, "sawtooth", 0.15),
+  nodeComplete: () => {
+    playBlip(523, 1046, 0.18, "triangle", 0.25);
+    setTimeout(() => playTone(1568, 0.15, "sine", 0.2), 90);
+  },
+  levelWon: () => {
+    playTone(523, 0.12, "triangle", 0.25);
+    setTimeout(() => playTone(659, 0.12, "triangle", 0.25), 120);
+    setTimeout(() => playTone(784, 0.14, "triangle", 0.3), 240);
+    setTimeout(() => playTone(1046, 0.45, "triangle", 0.3), 360);
+  },
 };

@@ -80,6 +80,7 @@ document.addEventListener("keydown", (e) => {
 });
 
 let wasThrusting = false;
+let wasTransmitting = false;
 
 const GAME_SIZE = 100;
 const GRID_SPACING = 10;
@@ -125,8 +126,16 @@ startLoop(canvas, (ctx, dt) => {
       Player.update(state.player, state.particles, dt);
       if (Level.hitsPlayer(state.level, state.player)) {
         state.player.alive = false;
+        state.camera.shakeFactor = 3;
+        Sound.sfx.explode();
       }
+      const prevCompleted = state.level.dynamic.completedNodes.size;
+      const prevWon = state.level.dynamic.won;
       Level.update(state.level, state.player, dt);
+      const newlyCompleted =
+        state.level.dynamic.completedNodes.size - prevCompleted;
+      for (let i = 0; i < newlyCompleted; i++) Sound.sfx.nodeComplete();
+      if (!prevWon && state.level.dynamic.won) Sound.sfx.levelWon();
     }
     state.camera.x = state.player.x;
     state.camera.y = state.player.y;
@@ -136,29 +145,30 @@ startLoop(canvas, (ctx, dt) => {
   else if (!state.player.thrusting && wasThrusting) Sound.thruster.stop();
   wasThrusting = state.player.thrusting;
 
+  const transmitting =
+    !state.edit.active &&
+    state.player.alive &&
+    !state.level.dynamic.won &&
+    Level.anyTransmitting(state.level);
+  if (transmitting && !wasTransmitting) Sound.transmission.start();
+  else if (!transmitting && wasTransmitting) Sound.transmission.stop();
+  wasTransmitting = transmitting;
+
   Particles.update(state.particles, dt);
-
-  ctx.fillStyle = "#000";
-  ctx.fillRect(0, 0, rect.width, rect.height);
-
-  const gameScreen = GAME_SIZE * state.camera.zoom;
-  const gameLeft = (rect.width - gameScreen) / 2;
-  const gameTop = (rect.height - gameScreen) / 2;
-
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(gameLeft, gameTop, gameScreen, gameScreen);
-  ctx.clip();
+  Camera.update(state.camera, dt);
 
   ctx.fillStyle = "#111";
-  ctx.fillRect(gameLeft, gameTop, gameScreen, gameScreen);
+  ctx.fillRect(0, 0, rect.width, rect.height);
+
+  ctx.save();
 
   Camera.drawWithCamera(ctx, state.camera, (ctx) => {
-    const halfView = GAME_SIZE / 2 + GRID_SPACING;
-    const minGX = Math.floor((state.camera.x - halfView) / GRID_SPACING);
-    const maxGX = Math.ceil((state.camera.x + halfView) / GRID_SPACING);
-    const minGY = Math.floor((state.camera.y - halfView) / GRID_SPACING);
-    const maxGY = Math.ceil((state.camera.y + halfView) / GRID_SPACING);
+    const halfViewX = rect.width / 2 / state.camera.zoom + GRID_SPACING;
+    const halfViewY = rect.height / 2 / state.camera.zoom + GRID_SPACING;
+    const minGX = Math.floor((state.camera.x - halfViewX) / GRID_SPACING);
+    const maxGX = Math.ceil((state.camera.x + halfViewX) / GRID_SPACING);
+    const minGY = Math.floor((state.camera.y - halfViewY) / GRID_SPACING);
+    const maxGY = Math.ceil((state.camera.y + halfViewY) / GRID_SPACING);
     ctx.fillStyle = "#555";
     for (let gx = minGX; gx <= maxGX; gx++) {
       for (let gy = minGY; gy <= maxGY; gy++) {

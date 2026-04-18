@@ -1,3 +1,5 @@
+import { expDecay } from "./game-math";
+
 export function create() {
   return {
     // center of camera
@@ -6,10 +8,22 @@ export function create() {
 
     rotation: 0,
     zoom: 1,
+
+    shakeFactor: 0,
+    shakeTime: 0,
   };
 }
 
 type Camera = ReturnType<typeof create>;
+
+const SHAKE_DECAY = 0.004;
+const SHAKE_FREQ_X = 0.052;
+const SHAKE_FREQ_Y = 0.056;
+
+export function update(camera: Camera, dt: number) {
+  camera.shakeTime += dt;
+  camera.shakeFactor = expDecay(camera.shakeFactor, 0, dt * SHAKE_DECAY);
+}
 
 function getTransformMatrix(
   canvasRect: DOMRect,
@@ -33,6 +47,9 @@ export function drawWithCamera(
   ctx.save();
   const canvasRect = ctx.canvas.getBoundingClientRect();
   const matrix = getTransformMatrix(canvasRect, camera, true);
+  const shakeX = Math.sin(camera.shakeTime * SHAKE_FREQ_X) * camera.shakeFactor;
+  const shakeY = Math.cos(camera.shakeTime * SHAKE_FREQ_Y) * camera.shakeFactor;
+  matrix.translateSelf(-shakeX, -shakeY);
   ctx.setTransform(matrix);
   draw(ctx);
   ctx.restore();

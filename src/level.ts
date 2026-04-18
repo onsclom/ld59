@@ -219,6 +219,14 @@ export function remainingNodes(level: Level) {
   return totalNodes(level) - level.dynamic.completedNodes.size;
 }
 
+export function anyTransmitting(level: Level) {
+  for (const i of nodeIndices(level)) {
+    if (level.dynamic.completedNodes.has(i)) continue;
+    if ((level.dynamic.nodeProgress[i] ?? 0) > 0) return true;
+  }
+  return false;
+}
+
 export function update(level: Level, player: PlayerT, dt: number) {
   if (!player.alive || level.dynamic.won) return;
   const indices = nodeIndices(level);
@@ -244,10 +252,38 @@ export function update(level: Level, player: PlayerT, dt: number) {
   }
 }
 
+const CHECKER_CELL = 5;
+let checkerPattern: CanvasPattern | null = null;
+function getCheckerPattern(ctx: CanvasRenderingContext2D): CanvasPattern | null {
+  if (checkerPattern) return checkerPattern;
+  const PX_PER_UNIT = 16;
+  const tile = document.createElement("canvas");
+  const cellPx = CHECKER_CELL * PX_PER_UNIT;
+  tile.width = cellPx * 2;
+  tile.height = cellPx * 2;
+  const tctx = tile.getContext("2d");
+  if (!tctx) return null;
+  tctx.fillStyle = "#bdbdbd";
+  tctx.fillRect(0, 0, cellPx * 2, cellPx * 2);
+  tctx.fillStyle = "#9e9e9e";
+  tctx.fillRect(0, 0, cellPx, cellPx);
+  tctx.fillRect(cellPx, cellPx, cellPx, cellPx);
+  const pat = ctx.createPattern(tile, "repeat");
+  if (!pat) return null;
+  // Pattern source is 2*cellPx pixels wide but represents 2*CHECKER_CELL world
+  // units. Scale the pattern so 1 source pixel = 1 / PX_PER_UNIT world units,
+  // making the pattern tile in world coordinates (so it translates/scales with
+  // the camera).
+  pat.setTransform(new DOMMatrix().scale(1 / PX_PER_UNIT, 1 / PX_PER_UNIT));
+  checkerPattern = pat;
+  return pat;
+}
+
 export function fillOutside(level: Level, ctx: CanvasRenderingContext2D) {
   const poly = getPerimeter(level);
   if (!poly || poly.length < 3) return;
-  ctx.fillStyle = "blue";
+  const pat = getCheckerPattern(ctx);
+  ctx.fillStyle = pat ?? "#bdbdbd";
   ctx.beginPath();
   ctx.rect(-1e6, -1e6, 2e6, 2e6);
   ctx.moveTo(poly[0]!.x, poly[0]!.y);
