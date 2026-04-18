@@ -287,24 +287,26 @@ startLoop(canvas, (ctx, dt) => {
   ctx.save();
 
   Camera.drawWithCamera(ctx, state.camera, (ctx) => {
-    const halfViewX = rect.width / 2 / state.camera.zoom + GRID_SPACING;
-    const halfViewY = rect.height / 2 / state.camera.zoom + GRID_SPACING;
-    const minGX = Math.floor((state.camera.x - halfViewX) / GRID_SPACING);
-    const maxGX = Math.ceil((state.camera.x + halfViewX) / GRID_SPACING);
-    const minGY = Math.floor((state.camera.y - halfViewY) / GRID_SPACING);
-    const maxGY = Math.ceil((state.camera.y + halfViewY) / GRID_SPACING);
-    ctx.fillStyle = "#555";
-    for (let gx = minGX; gx <= maxGX; gx++) {
-      for (let gy = minGY; gy <= maxGY; gy++) {
-        ctx.beginPath();
-        ctx.arc(
-          gx * GRID_SPACING,
-          gy * GRID_SPACING,
-          GRID_DOT_RADIUS,
-          0,
-          Math.PI * 2,
-        );
-        ctx.fill();
+    if (state.edit.active) {
+      const halfViewX = rect.width / 2 / state.camera.zoom + GRID_SPACING;
+      const halfViewY = rect.height / 2 / state.camera.zoom + GRID_SPACING;
+      const minGX = Math.floor((state.camera.x - halfViewX) / GRID_SPACING);
+      const maxGX = Math.ceil((state.camera.x + halfViewX) / GRID_SPACING);
+      const minGY = Math.floor((state.camera.y - halfViewY) / GRID_SPACING);
+      const maxGY = Math.ceil((state.camera.y + halfViewY) / GRID_SPACING);
+      ctx.fillStyle = "#555";
+      for (let gx = minGX; gx <= maxGX; gx++) {
+        for (let gy = minGY; gy <= maxGY; gy++) {
+          ctx.beginPath();
+          ctx.arc(
+            gx * GRID_SPACING,
+            gy * GRID_SPACING,
+            GRID_DOT_RADIUS,
+            0,
+            Math.PI * 2,
+          );
+          ctx.fill();
+        }
       }
     }
 
