@@ -1,0 +1,17 @@
+{
+  "name": "ld59",
+  "module": "src/index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun src/index.html",
+    "build": "bun build ./src/index.html --outdir=./dist --minify",
+    "preview": "bun dist/index.html"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
