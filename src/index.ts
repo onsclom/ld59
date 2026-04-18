@@ -328,19 +328,21 @@ startLoop(canvas, (ctx, dt) => {
   Edit.drawHUD(state.edit, ctx);
 
   ctx.save();
-  ctx.fillStyle = "#888";
-  ctx.font = "12px monospace";
+  ctx.font = "bold 14px monospace";
   ctx.textAlign = "right";
   ctx.textBaseline = "top";
-  ctx.fillText(
-    `LEVEL ${state.currentLevelIndex + 1} / ${state.levels.length}`,
-    rect.width - 12,
-    12,
-  );
+  ctx.lineWidth = 4;
+  ctx.lineJoin = "round";
+  ctx.miterLimit = 2;
+  ctx.strokeStyle = "rgba(0,0,0,0.85)";
+  ctx.fillStyle = "#eee";
+  const levelText = `LEVEL ${state.currentLevelIndex + 1} / ${state.levels.length}`;
+  ctx.strokeText(levelText, rect.width - 12, 12);
+  ctx.fillText(levelText, rect.width - 12, 12);
   if (serializeLevels() !== savedSnapshot) {
-    ctx.fillStyle = "#f44";
-    ctx.font = "bold 12px monospace";
-    ctx.fillText("UNSAVED", rect.width - 12, 28);
+    ctx.fillStyle = "#ff6666";
+    ctx.strokeText("UNSAVED", rect.width - 12, 30);
+    ctx.fillText("UNSAVED", rect.width - 12, 30);
   }
   ctx.restore();
 
@@ -349,15 +351,17 @@ startLoop(canvas, (ctx, dt) => {
     if (total > 0) {
       const remaining = Level.remainingNodes(state.level);
       ctx.save();
-      ctx.fillStyle = "#9cffcf";
       ctx.font = "bold 18px monospace";
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      ctx.fillText(
-        `TRANSMISSION NODES  ${total - remaining} / ${total}`,
-        rect.width / 2,
-        16,
-      );
+      ctx.lineWidth = 4;
+      ctx.lineJoin = "round";
+      ctx.miterLimit = 2;
+      ctx.strokeStyle = "rgba(0,0,0,0.85)";
+      ctx.fillStyle = "#9cffcf";
+      const nodeText = `TRANSMISSION NODES  ${total - remaining} / ${total}`;
+      ctx.strokeText(nodeText, rect.width / 2, 16);
+      ctx.fillText(nodeText, rect.width / 2, 16);
       ctx.restore();
     }
 
@@ -365,21 +369,37 @@ startLoop(canvas, (ctx, dt) => {
 
     if (state.level.dynamic.won) {
       ctx.save();
-      ctx.fillStyle = "#9cffcf";
-      ctx.font = "bold 36px monospace";
+      ctx.fillStyle = "rgba(0,0,0,0.6)";
+      ctx.fillRect(0, 0, rect.width, rect.height);
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText("WIN", rect.width / 2, rect.height / 2 - 20);
+      ctx.strokeStyle = "rgba(0,0,0,0.9)";
+      ctx.lineWidth = 6;
+      ctx.lineJoin = "round";
+      ctx.miterLimit = 2;
+      ctx.font = "bold 48px monospace";
+      ctx.fillStyle = "#9cffcf";
+      ctx.strokeText("WIN", rect.width / 2, rect.height / 2 - 26);
+      ctx.fillText("WIN", rect.width / 2, rect.height / 2 - 26);
+      ctx.font = "bold 22px monospace";
+      ctx.lineWidth = 5;
       ctx.fillStyle = "#cfe7ff";
-      ctx.font = "bold 18px monospace";
-      ctx.fillText("R TO RESTART", rect.width / 2, rect.height / 2 + 20);
+      ctx.strokeText("E FOR NEXT LEVEL", rect.width / 2, rect.height / 2 + 24);
+      ctx.fillText("E FOR NEXT LEVEL", rect.width / 2, rect.height / 2 + 24);
       ctx.restore();
     } else if (!state.player.alive) {
       ctx.save();
-      ctx.fillStyle = "#f44";
-      ctx.font = "bold 28px monospace";
+      ctx.fillStyle = "rgba(0,0,0,0.55)";
+      ctx.fillRect(0, 0, rect.width, rect.height);
+      ctx.font = "bold 32px monospace";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
+      ctx.strokeStyle = "rgba(0,0,0,0.9)";
+      ctx.lineWidth = 6;
+      ctx.lineJoin = "round";
+      ctx.miterLimit = 2;
+      ctx.fillStyle = "#ff6666";
+      ctx.strokeText("R TO RESTART", rect.width / 2, rect.height / 2);
       ctx.fillText("R TO RESTART", rect.width / 2, rect.height / 2);
       ctx.restore();
     }

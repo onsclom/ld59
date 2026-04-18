@@ -66,9 +66,24 @@ export function create(x: number, y: number, type: SatelliteType): Satellite {
   return { x, y, type };
 }
 
-export function draw(ctx: CanvasRenderingContext2D, sat: Satellite) {
+const SWAY_AMPLITUDE = 0.14;
+const SWAY_SPEED = 2.3;
+
+export function draw(
+  ctx: CanvasRenderingContext2D,
+  sat: Satellite,
+  sway = true,
+) {
   ctx.save();
   ctx.translate(sat.x, sat.y);
+  if (sway) {
+    const t = performance.now() / 1000;
+    const phase = sat.x * 0.37 + sat.y * 0.21;
+    const rot =
+      Math.sin(t * SWAY_SPEED + phase) * SWAY_AMPLITUDE +
+      Math.sin(t * SWAY_SPEED * 2.3 + phase * 1.7) * SWAY_AMPLITUDE * 0.3;
+    ctx.rotate(rot);
+  }
   if (sat.type === "transmission-node") drawTransmissionNode(ctx);
   else drawStandard(ctx, TYPE_COLORS[sat.type]);
   ctx.restore();

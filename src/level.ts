@@ -325,13 +325,12 @@ export function draw(level: Level, ctx: CanvasRenderingContext2D) {
     const faded =
       sat.type === "transmission-node" && level.dynamic.completedNodes.has(i);
     if (faded) ctx.globalAlpha = 0.25;
-    Satellite.draw(ctx, sat);
+    Satellite.draw(ctx, sat, !faded);
     if (faded) ctx.globalAlpha = 1;
   }
 }
 
 const NODE_RING_COLOR = "rgba(74, 224, 160, 0.35)";
-const NODE_RING_DONE_COLOR = "rgba(74, 224, 160, 0.12)";
 const NODE_PROGRESS_COLOR = "#9cffcf";
 const NODE_LINK_COLOR = "rgba(156, 255, 207, 0.85)";
 
@@ -344,16 +343,15 @@ export function drawTransmissionFX(
     const sat = level.satellites[i]!;
     if (sat.type !== "transmission-node") continue;
     const completed = level.dynamic.completedNodes.has(i);
+    if (completed) continue;
 
-    ctx.strokeStyle = completed ? NODE_RING_DONE_COLOR : NODE_RING_COLOR;
+    ctx.strokeStyle = NODE_RING_COLOR;
     ctx.lineWidth = 0.15;
     ctx.setLineDash([0.6, 0.6]);
     ctx.beginPath();
     ctx.arc(sat.x, sat.y, NODE_RADIUS, 0, Math.PI * 2);
     ctx.stroke();
     ctx.setLineDash([]);
-
-    if (completed) continue;
 
     const progress = level.dynamic.nodeProgress[i] ?? 0;
     if (progress > 0) {
