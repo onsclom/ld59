@@ -29,13 +29,42 @@ export function create() {
     width: 1.5,
     height: 5,
     thrustEmitAccum: 0,
+    alive: true,
   };
 }
 
 type Player = ReturnType<typeof create>;
 type ParticleSystem = ReturnType<typeof Particles.create>;
 
+export function reset(player: Player) {
+  player.x = 0;
+  player.y = 0;
+  player.vx = 0;
+  player.vy = 0;
+  player.rotation = 0;
+  player.thrustEmitAccum = 0;
+  player.alive = true;
+}
+
+export function corners(player: Player) {
+  const sinR = Math.sin(player.rotation);
+  const cosR = Math.cos(player.rotation);
+  const hw = player.width / 2;
+  const hh = player.height / 2;
+  const local: [number, number][] = [
+    [-hw, -hh],
+    [hw, -hh],
+    [hw, hh],
+    [-hw, hh],
+  ];
+  return local.map(([lx, ly]) => ({
+    x: player.x + lx * cosR - ly * sinR,
+    y: player.y + lx * sinR + ly * cosR,
+  }));
+}
+
 export function update(player: Player, particles: ParticleSystem, dt: number) {
+  if (!player.alive) return;
   let turn = 0;
   if (Input.keysDown.has("a") || Input.keysDown.has("ArrowLeft")) turn -= 1;
   if (Input.keysDown.has("d") || Input.keysDown.has("ArrowRight")) turn += 1;
@@ -129,6 +158,11 @@ export function draw(player: Player, ctx: CanvasRenderingContext2D) {
   ctx.strokeStyle = "#0f0";
   ctx.lineWidth = 0.15;
   ctx.strokeRect(-w / 2, -h / 2, w, h);
+
+  if (!player.alive) {
+    ctx.fillStyle = "rgba(255, 40, 40, 0.55)";
+    ctx.fillRect(-w / 2, -h / 2, w, h);
+  }
 
   ctx.restore();
 }

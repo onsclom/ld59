@@ -7,6 +7,8 @@ export const mouse = {
   y: 0,
   justLeftClicked: false,
   justRightClicked: false,
+  justLeftReleased: false,
+  justRightReleased: false,
   leftClickDown: false,
   rightClickDown: false,
   wheelDelta: 0,
@@ -16,6 +18,8 @@ export const mouse = {
 export function resetInput() {
   mouse.justLeftClicked = false;
   mouse.justRightClicked = false;
+  mouse.justLeftReleased = false;
+  mouse.justRightReleased = false;
   mouse.wheelDelta = 0;
   keysJustPressed.clear();
   keysJustReleased.clear();
@@ -44,8 +48,10 @@ export function registerInputListeners(canvas: HTMLCanvasElement): () => void {
     (e) => {
       if (e.button === 0) {
         mouse.leftClickDown = false;
+        mouse.justLeftReleased = true;
       } else if (e.button === 2) {
         mouse.rightClickDown = false;
+        mouse.justRightReleased = true;
       }
     },
     { signal },
@@ -85,6 +91,14 @@ export function registerInputListeners(canvas: HTMLCanvasElement): () => void {
     { signal },
   );
 
+  canvas.addEventListener(
+    "contextmenu",
+    (e) => {
+      e.preventDefault();
+    },
+    { signal },
+  );
+
   document.body.addEventListener(
     "keydown",
     (e) => {
@@ -115,6 +129,8 @@ export function registerInputListeners(canvas: HTMLCanvasElement): () => void {
     mouse.rightClickDown = false;
     mouse.justLeftClicked = false;
     mouse.justRightClicked = false;
+    mouse.justLeftReleased = false;
+    mouse.justRightReleased = false;
     mouse.wheelDelta = 0;
   };
 }
