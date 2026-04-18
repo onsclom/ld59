@@ -103,7 +103,7 @@ export function update(
   if (Input.mouse.justLeftReleased && edit.pendingStart) {
     const c = cursorWorld(canvasRect, camera);
     if (c.x !== edit.pendingStart.x || c.y !== edit.pendingStart.y) {
-      level.walls.push({
+      Level.addWall(level, {
         x1: edit.pendingStart.x,
         y1: edit.pendingStart.y,
         x2: c.x,
@@ -121,7 +121,7 @@ export function update(
       camera,
     );
     const idx = nearestWallIndex(level, world.x, world.y, DELETE_RADIUS);
-    if (idx >= 0) level.walls.splice(idx, 1);
+    if (idx >= 0) Level.removeWallAt(level, idx);
   }
 }
 

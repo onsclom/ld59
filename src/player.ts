@@ -30,6 +30,7 @@ export function create() {
     height: 5,
     thrustEmitAccum: 0,
     alive: true,
+    hasThrusted: false,
   };
 }
 
@@ -44,6 +45,7 @@ export function reset(player: Player) {
   player.rotation = 0;
   player.thrustEmitAccum = 0;
   player.alive = true;
+  player.hasThrusted = false;
 }
 
 export function corners(player: Player) {
@@ -79,9 +81,10 @@ export function update(player: Player, particles: ParticleSystem, dt: number) {
     const fy = -Math.cos(player.rotation);
     player.vx += fx * THRUST * dt;
     player.vy += fy * THRUST * dt;
+    player.hasThrusted = true;
   }
 
-  player.vy += GRAVITY * dt;
+  if (player.hasThrusted) player.vy += GRAVITY * dt;
 
   const dragFactor = Math.exp(-DRAG * dt);
   player.vx *= dragFactor;

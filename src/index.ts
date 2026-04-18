@@ -100,6 +100,7 @@ const stopLoop = startLoop(canvas, (ctx, dt) => {
       }
     }
 
+    Level.fillOutside(state.level, ctx);
     Level.draw(state.level, ctx);
     Particles.draw(state.particles, ctx);
     if (state.edit.active) ctx.globalAlpha = 0.3;
