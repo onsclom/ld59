@@ -12,7 +12,7 @@ const VERTEX_GRAB_RADIUS = 2;
 
 type Mode = "wall" | Satellite.SatelliteType | "move";
 
-const MODES: readonly Mode[] = ["wall", ...Satellite.TYPES, "move"];
+const MODES: readonly Mode[] = ["move", "wall", ...Satellite.TYPES];
 const MODE_LABELS: Record<Mode, string> = {
   wall: "Wall",
   ...Satellite.TYPE_LABELS,
@@ -29,7 +29,7 @@ export function create() {
     cameraX: 0,
     cameraY: 0,
     pendingStart: null as { x: number; y: number } | null,
-    mode: "wall" as Mode,
+    mode: "move" as Mode,
     drag: null as DragTarget | null,
   };
 }
@@ -374,7 +374,7 @@ export function drawHUD(edit: EditState, ctx: CanvasRenderingContext2D) {
   if (!edit.active) return;
   ctx.save();
   ctx.fillStyle = "rgba(0,0,0,0.7)";
-  ctx.fillRect(10, 10, 260, 200);
+  ctx.fillRect(10, 10, 260, 240);
   ctx.fillStyle = "#0f0";
   ctx.font = "14px monospace";
   const lines = [
@@ -382,6 +382,8 @@ export function drawHUD(edit: EditState, ctx: CanvasRenderingContext2D) {
     "Shift     exit",
     "WASD      fly (noclip)",
     "Q / E     prev / next level",
+    "N         insert level after",
+    "X         delete current level",
     "Cmd+S     save levels",
     "1-6       select tool",
     "L-Click   place / drag",

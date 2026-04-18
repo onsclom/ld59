@@ -1,4 +1,4 @@
-import { segmentsIntersect } from "./game-math";
+import { segmentIntersectT, segmentsIntersect } from "./game-math";
 import * as Player from "./player";
 import * as Satellite from "./satellite";
 
@@ -17,6 +17,8 @@ function createDynamic() {
     nodeProgress: {} as Record<number, number>,
     completedNodes: new Set<number>(),
     won: false,
+    activeInhibitors: new Set<number>(),
+    statusEffects: Player.createEffects(),
   };
 }
 
@@ -227,6 +229,22 @@ export function anyTransmitting(level: Level) {
   return false;
 }
 
+export function computeStatus(level: Level, player: PlayerT, enabled: boolean) {
+  level.dynamic.activeInhibitors.clear();
+  const e = level.dynamic.statusEffects;
+  Player.clearEffects(e);
+  if (!enabled || !player.alive || level.dynamic.won) return;
+  for (let i = 0; i < level.satellites.length; i++) {
+    const sat = level.satellites[i]!;
+    if (sat.type === "transmission-node") continue;
+    if (!losClear(level, player.x, player.y, sat.x, sat.y)) continue;
+    level.dynamic.activeInhibitors.add(i);
+    if (sat.type === "thrust-inhibitor") e.thrustDisabled = true;
+    else if (sat.type === "turn-inhibitor") e.turnDisabled = true;
+    else if (sat.type === "control-reverser") e.controlsReversed = true;
+  }
+}
+
 export function update(level: Level, player: PlayerT, dt: number) {
   if (!player.alive || level.dynamic.won) return;
   const indices = nodeIndices(level);
@@ -363,6 +381,92 @@ export function drawTransmissionFX(
       ctx.lineTo(player.x, player.y);
       ctx.stroke();
     }
+  }
+}
+
+function firstWallHitT(
+  level: Level,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+) {
+  let best = Infinity;
+  for (const w of level.walls) {
+    const t = segmentIntersectT(x1, y1, x2, y2, w.x1, w.y1, w.x2, w.y2);
+    if (t < best) best = t;
+  }
+  return best;
+}
+
+const INHIBITOR_DOT_PERIOD = 1.2;
+const INHIBITOR_DOT_SPEED = 0.006;
+
+export function drawInhibitorFX(
+  level: Level,
+  player: PlayerT,
+  ctx: CanvasRenderingContext2D,
+) {
+  if (!player.alive || level.dynamic.won) return;
+  const now = performance.now();
+  const phase =
+    ((now * INHIBITOR_DOT_SPEED) % INHIBITOR_DOT_PERIOD +
+      INHIBITOR_DOT_PERIOD) %
+    INHIBITOR_DOT_PERIOD;
+
+  for (let i = 0; i < level.satellites.length; i++) {
+    const sat = level.satellites[i]!;
+    if (sat.type === "transmission-node") continue;
+    const color = Satellite.TYPE_COLORS[sat.type];
+    const active = level.dynamic.activeInhibitors.has(i);
+
+    const dx = player.x - sat.x;
+    const dy = player.y - sat.y;
+    const hitT = active
+      ? 1
+      : Math.min(1, firstWallHitT(level, sat.x, sat.y, player.x, player.y));
+    const endX = sat.x + dx * hitT;
+    const endY = sat.y + dy * hitT;
+    const len = Math.hypot(endX - sat.x, endY - sat.y);
+    if (len < 0.001) continue;
+    const ux = (endX - sat.x) / len;
+    const uy = (endY - sat.y) / len;
+
+    ctx.save();
+
+    if (active) {
+      ctx.globalAlpha = 0.22 + 0.22 * Math.sin(now / 180);
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(sat.x, sat.y, 2.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = active ? 0.08 : 0.05;
+    ctx.globalAlpha = active ? 0.4 : 0.2;
+    ctx.beginPath();
+    ctx.moveTo(sat.x, sat.y);
+    ctx.lineTo(endX, endY);
+    ctx.stroke();
+
+    const dotR = active ? 0.22 : 0.13;
+    ctx.fillStyle = color;
+    ctx.globalAlpha = active ? 0.95 : 0.55;
+    for (let d = phase; d < len; d += INHIBITOR_DOT_PERIOD) {
+      ctx.beginPath();
+      ctx.arc(sat.x + ux * d, sat.y + uy * d, dotR, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    if (!active && hitT < 1) {
+      ctx.globalAlpha = 0.6;
+      ctx.beginPath();
+      ctx.arc(endX, endY, 0.3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
   }
 }
 

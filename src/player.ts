@@ -1,7 +1,35 @@
 import { randRange } from "./game-math";
 import * as Input from "./input";
 import * as Particles from "./particles";
+import * as Satellite from "./satellite";
 import * as Sound from "./sound";
+
+export type StatusEffects = {
+  thrustDisabled: boolean;
+  turnDisabled: boolean;
+  controlsReversed: boolean;
+};
+
+export function createEffects(): StatusEffects {
+  return {
+    thrustDisabled: false,
+    turnDisabled: false,
+    controlsReversed: false,
+  };
+}
+
+export function clearEffects(e: StatusEffects) {
+  e.thrustDisabled = false;
+  e.turnDisabled = false;
+  e.controlsReversed = false;
+}
+
+export function anyActive(e: StatusEffects) {
+  return e.thrustDisabled || e.turnDisabled || e.controlsReversed;
+}
+
+const DENY_COOLDOWN_MS = 260;
+const DENY_FLASH_MS = 220;
 
 const TURN_RATE = 0.004;
 const THRUST = 0.00005;
@@ -58,6 +86,8 @@ export function create() {
     alive: true,
     hasThrusted: false,
     thrusting: false,
+    denyCooldown: 0,
+    denyFlash: 0,
   };
 }
 
@@ -74,6 +104,8 @@ export function reset(player: Player) {
   player.alive = true;
   player.hasThrusted = false;
   player.thrusting = false;
+  player.denyCooldown = 0;
+  player.denyFlash = 0;
 }
 
 export function corners(player: Player) {
@@ -93,18 +125,43 @@ export function corners(player: Player) {
   }));
 }
 
-export function update(player: Player, particles: ParticleSystem, dt: number) {
-  player.thrusting =
+export function update(
+  player: Player,
+  particles: ParticleSystem,
+  dt: number,
+  effects: StatusEffects,
+) {
+  player.denyCooldown = Math.max(0, player.denyCooldown - dt);
+  player.denyFlash = Math.max(0, player.denyFlash - dt);
+
+  const wantThrust =
     player.alive &&
     (Input.keysDown.has("w") ||
       Input.keysDown.has("ArrowUp") ||
       Input.keysDown.has(" "));
+  player.thrusting = wantThrust && !effects.thrustDisabled;
+  const deniedThrust = wantThrust && effects.thrustDisabled;
 
   if (!player.alive) return;
-  let turn = 0;
-  if (Input.keysDown.has("a") || Input.keysDown.has("ArrowLeft")) turn -= 1;
-  if (Input.keysDown.has("d") || Input.keysDown.has("ArrowRight")) turn += 1;
+
+  let turnInput = 0;
+  if (Input.keysDown.has("a") || Input.keysDown.has("ArrowLeft")) turnInput -= 1;
+  if (Input.keysDown.has("d") || Input.keysDown.has("ArrowRight")) turnInput += 1;
+  const wantTurn = turnInput !== 0;
+  const deniedTurn = wantTurn && effects.turnDisabled;
+  let turn = turnInput;
+  if (effects.turnDisabled) turn = 0;
+  else if (effects.controlsReversed) turn = -turn;
   player.rotation += turn * TURN_RATE * dt;
+
+  if (deniedThrust || deniedTurn) {
+    if (player.denyCooldown <= 0) {
+      Sound.sfx.deny();
+      player.denyCooldown = DENY_COOLDOWN_MS;
+      player.denyFlash = DENY_FLASH_MS;
+      emitDenyParticles(particles, player, deniedThrust, deniedTurn);
+    }
+  }
 
   if (player.thrusting) {
     const fx = Math.sin(player.rotation);
@@ -153,11 +210,47 @@ export function update(player: Player, particles: ParticleSystem, dt: number) {
   } else {
     player.thrustEmitAccum = 0;
   }
-
-  if (Input.keysJustPressed.has(" ")) Sound.sfx.jump();
 }
 
-export function draw(player: Player, ctx: CanvasRenderingContext2D) {
+function emitDenyParticles(
+  particles: ParticleSystem,
+  player: Player,
+  deniedThrust: boolean,
+  deniedTurn: boolean,
+) {
+  const sinR = Math.sin(player.rotation);
+  const cosR = Math.cos(player.rotation);
+  const emitAt = (lx: number, ly: number, count: number) => {
+    const wx = player.x + lx * cosR - ly * sinR;
+    const wy = player.y + lx * sinR + ly * cosR;
+    for (let i = 0; i < count; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const speed = randRange(0.001, 0.004);
+      Particles.emit(particles, {
+        x: wx,
+        y: wy,
+        vx: Math.cos(a) * speed,
+        vy: Math.sin(a) * speed,
+        life: randRange(250, 500),
+        size: randRange(0.3, 0.7),
+        r: 255,
+        g: 90,
+        b: 60,
+      });
+    }
+  };
+  if (deniedThrust) emitAt(0, player.height / 2 + 0.7, 8);
+  if (deniedTurn) {
+    emitAt(-player.width / 2 - 0.3, 0, 4);
+    emitAt(player.width / 2 + 0.3, 0, 4);
+  }
+}
+
+export function draw(
+  player: Player,
+  ctx: CanvasRenderingContext2D,
+  effects: StatusEffects,
+) {
   const w = player.width;
   const h = player.height;
 
@@ -214,5 +307,48 @@ export function draw(player: Player, ctx: CanvasRenderingContext2D) {
     ctx.fillRect(-w / 2, -h / 2, w, h);
   }
 
+  drawStatusRings(ctx, w, h, effects);
+  drawDenyFlash(ctx, w, h, player.denyFlash);
+
   ctx.restore();
+}
+
+function drawStatusRings(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  effects: StatusEffects,
+) {
+  if (!anyActive(effects)) return;
+  const pulse = 0.55 + 0.45 * Math.sin(performance.now() / 160);
+  const rings: string[] = [];
+  if (effects.thrustDisabled) rings.push(Satellite.TYPE_COLORS["thrust-inhibitor"]);
+  if (effects.turnDisabled) rings.push(Satellite.TYPE_COLORS["turn-inhibitor"]);
+  if (effects.controlsReversed) rings.push(Satellite.TYPE_COLORS["control-reverser"]);
+  let inset = 0.35;
+  ctx.lineWidth = 0.18;
+  for (const color of rings) {
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = 0.45 + 0.4 * pulse;
+    ctx.strokeRect(-w / 2 - inset, -h / 2 - inset, w + inset * 2, h + inset * 2);
+    inset += 0.35;
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawDenyFlash(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  remaining: number,
+) {
+  if (remaining <= 0) return;
+  const t = remaining / DENY_FLASH_MS;
+  ctx.globalAlpha = t * 0.8;
+  ctx.fillStyle = "rgba(255, 70, 50, 0.5)";
+  ctx.fillRect(-w / 2 - 0.3, -h / 2 - 0.3, w + 0.6, h + 0.6);
+  ctx.strokeStyle = "#ff6040";
+  ctx.lineWidth = 0.2;
+  ctx.strokeRect(-w / 2 - 0.3, -h / 2 - 0.3, w + 0.6, h + 0.6);
+  ctx.globalAlpha = 1;
 }

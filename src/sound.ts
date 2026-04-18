@@ -269,6 +269,60 @@ export const transmission = {
   stop: () => getTransmission().stop(),
 };
 
+function makeLoop(
+  ref: { t: Thruster | null },
+  opts: Parameters<typeof createTone>[0],
+): Thruster {
+  return {
+    start: () => {
+      if (!ref.t) ref.t = createTone(opts);
+      ref.t.start();
+    },
+    stop: () => {
+      if (ref.t) ref.t.stop();
+    },
+  };
+}
+
+export const thrustInhibit = makeLoop(
+  { t: null },
+  {
+    freq: 180,
+    wave: "sawtooth",
+    volume: 0.05,
+    attack: 0.05,
+    release: 0.15,
+    vibratoHz: 5,
+    vibratoDepth: 18,
+  },
+);
+
+export const turnInhibit = makeLoop(
+  { t: null },
+  {
+    freq: 260,
+    wave: "square",
+    volume: 0.04,
+    attack: 0.05,
+    release: 0.15,
+    vibratoHz: 11,
+    vibratoDepth: 24,
+  },
+);
+
+export const controlReverse = makeLoop(
+  { t: null },
+  {
+    freq: 340,
+    wave: "triangle",
+    volume: 0.05,
+    attack: 0.05,
+    release: 0.15,
+    vibratoHz: 3,
+    vibratoDepth: 80,
+  },
+);
+
 // Convenience presets you'll actually reach for during a jam.
 export const sfx = {
   jump: () => playBlip(300, 900, 0.12, "square", 0.15),
