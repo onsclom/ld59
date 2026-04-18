@@ -126,9 +126,9 @@ const GRID_SPACING = 10;
 const GRID_DOT_RADIUS = 0.4;
 
 const STATUS_CHIP_LABELS: Record<keyof Player.StatusEffects, string> = {
-  thrustDisabled: "THRUSTERS DISABLED",
-  turnDisabled: "TURNING DISABLED",
-  controlsReversed: "CONTROLS REVERSED",
+  thrustDisabled: "THRUST JAMMED",
+  turnDisabled: "TURN JAMMED",
+  controlsReversed: "CONTROLS INVERTED",
 };
 
 const STATUS_CHIP_COLORS: Record<keyof Player.StatusEffects, string> = {
@@ -152,12 +152,12 @@ function drawStatusHUD(
   if (active.length === 0) return;
 
   ctx.save();
-  ctx.font = "bold 14px monospace";
+  ctx.font = "bold 15px monospace";
   ctx.textBaseline = "middle";
   ctx.textAlign = "center";
 
-  const padX = 12;
-  const chipH = 26;
+  const padX = 14;
+  const chipH = 30;
   const gap = 8;
   const widths = active.map(
     (k) => ctx.measureText(STATUS_CHIP_LABELS[k]).width + padX * 2,
@@ -172,7 +172,11 @@ function drawStatusHUD(
     const w = widths[i]!;
     const color = STATUS_CHIP_COLORS[k];
 
-    ctx.globalAlpha = 0.22 * pulse;
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = "rgba(10, 10, 14, 0.88)";
+    ctx.fillRect(x, y, w, chipH);
+
+    ctx.globalAlpha = 0.18 * pulse;
     ctx.fillStyle = color;
     ctx.fillRect(x, y, w, chipH);
 
@@ -181,7 +185,12 @@ function drawStatusHUD(
     ctx.lineWidth = 2;
     ctx.strokeRect(x, y, w, chipH);
 
-    ctx.fillStyle = color;
+    ctx.lineWidth = 4;
+    ctx.lineJoin = "round";
+    ctx.miterLimit = 2;
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.95)";
+    ctx.strokeText(STATUS_CHIP_LABELS[k], x + w / 2, y + chipH / 2 + 1);
+    ctx.fillStyle = "#ffffff";
     ctx.fillText(STATUS_CHIP_LABELS[k], x + w / 2, y + chipH / 2 + 1);
 
     x += w + gap;
