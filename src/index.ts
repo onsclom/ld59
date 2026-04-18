@@ -5,7 +5,6 @@ import * as Input from "./input";
 import * as Level from "./level";
 import * as Particles from "./particles";
 import * as Player from "./player";
-import * as Satellite from "./satellite";
 import * as Sound from "./sound";
 import { persistent } from "./hmr";
 
@@ -112,7 +111,6 @@ const stopLoop = startLoop(canvas, (ctx, dt) => {
 
     Level.fillOutside(state.level, ctx);
     Level.draw(state.level, ctx);
-    Satellite.draw(ctx, 0, 0);
     Particles.draw(state.particles, ctx);
     if (state.edit.active) ctx.globalAlpha = 0.3;
     Player.draw(state.player, ctx);

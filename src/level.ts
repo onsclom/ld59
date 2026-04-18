@@ -1,5 +1,6 @@
 import { segmentsIntersect } from "./game-math";
 import * as Player from "./player";
+import * as Satellite from "./satellite";
 
 export type Wall = { x1: number; y1: number; x2: number; y2: number };
 export type Point = { x: number; y: number };
@@ -7,6 +8,7 @@ export type Point = { x: number; y: number };
 export function create() {
   return {
     walls: [] as Wall[],
+    satellites: [] as Satellite.Satellite[],
     perimeter: null as Point[] | null,
     dirty: true,
   };
@@ -23,6 +25,14 @@ export function addWall(level: Level, wall: Wall) {
 export function removeWallAt(level: Level, idx: number) {
   level.walls.splice(idx, 1);
   level.dirty = true;
+}
+
+export function addSatellite(level: Level, sat: Satellite.Satellite) {
+  level.satellites.push(sat);
+}
+
+export function removeSatelliteAt(level: Level, idx: number) {
+  level.satellites.splice(idx, 1);
 }
 
 function vkey(x: number, y: number) {
@@ -163,4 +173,26 @@ export function draw(level: Level, ctx: CanvasRenderingContext2D) {
     ctx.lineTo(w.x2, w.y2);
     ctx.stroke();
   }
+  for (const sat of level.satellites) {
+    Satellite.draw(ctx, sat);
+  }
+}
+
+export function nearestSatelliteIndex(
+  level: Level,
+  x: number,
+  y: number,
+  maxDist: number,
+) {
+  let best = -1;
+  let bestDist = maxDist;
+  for (let i = 0; i < level.satellites.length; i++) {
+    const s = level.satellites[i]!;
+    const d = Math.hypot(x - s.x, y - s.y);
+    if (d < bestDist) {
+      bestDist = d;
+      best = i;
+    }
+  }
+  return best;
 }
