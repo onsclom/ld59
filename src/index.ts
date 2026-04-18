@@ -1,4 +1,5 @@
 import { startLoop } from "./game-loop";
+import { mod } from "./game-math";
 import * as Camera from "./camera";
 import * as Edit from "./edit";
 import * as Input from "./input";
@@ -34,8 +35,7 @@ function serializeLevels() {
 let savedSnapshot = serializeLevels();
 
 function switchLevel(dir: number) {
-  const newIdx = state.currentLevelIndex + dir;
-  if (newIdx < 0 || newIdx >= state.levels.length) return;
+  const newIdx = mod(state.currentLevelIndex + dir, state.levels.length);
   state.currentLevelIndex = newIdx;
   state.level = state.levels[newIdx]!;
   Player.reset(state.player);
@@ -226,6 +226,7 @@ startLoop(canvas, (ctx, dt) => {
     const frozen = !state.player.alive || state.level.dynamic.won;
     if (frozen) state.player.thrusting = false;
     else {
+      const wasAlive = state.player.alive;
       Player.update(
         state.player,
         state.particles,
@@ -234,16 +235,18 @@ startLoop(canvas, (ctx, dt) => {
       );
       if (Level.hitsPlayer(state.level, state.player)) {
         state.player.alive = false;
-        state.camera.shakeFactor = 3;
-        Sound.sfx.explode();
       }
       const prevCompleted = state.level.dynamic.completedNodes.size;
       const prevWon = state.level.dynamic.won;
-      Level.update(state.level, state.player, dt);
+      Level.update(state.level, state.player, state.particles, dt);
       const newlyCompleted =
         state.level.dynamic.completedNodes.size - prevCompleted;
       for (let i = 0; i < newlyCompleted; i++) Sound.sfx.nodeComplete();
       if (!prevWon && state.level.dynamic.won) Sound.sfx.levelWon();
+      if (wasAlive && !state.player.alive) {
+        state.camera.shakeFactor = 3;
+        Sound.sfx.explode();
+      }
     }
     state.camera.x = state.player.x;
     state.camera.y = state.player.y;
@@ -317,6 +320,7 @@ startLoop(canvas, (ctx, dt) => {
       Level.drawInhibitorFX(state.level, state.player, ctx);
     }
     Particles.draw(state.particles, ctx);
+    Level.drawProjectiles(state.level, ctx);
     if (state.edit.active) ctx.globalAlpha = 0.3;
     Player.draw(state.player, ctx, state.level.dynamic.statusEffects);
     ctx.globalAlpha = 1;

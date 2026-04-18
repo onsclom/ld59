@@ -385,7 +385,7 @@ export function drawHUD(edit: EditState, ctx: CanvasRenderingContext2D) {
     "N         insert level after",
     "X         delete current level",
     "Cmd+S     save levels",
-    "1-6       select tool",
+    "1-8       select tool",
     "L-Click   place / drag",
     "R-Hold    delete",
     "Esc       cancel pending",

@@ -1,6 +1,9 @@
-import { segmentIntersectT, segmentsIntersect } from "./game-math";
+import { randRange, segmentIntersectT, segmentsIntersect } from "./game-math";
+import * as Particles from "./particles";
 import * as Player from "./player";
+import * as Projectile from "./projectile";
 import * as Satellite from "./satellite";
+import * as Sound from "./sound";
 
 export type Wall = { x1: number; y1: number; x2: number; y2: number };
 export type Point = { x: number; y: number };
@@ -19,6 +22,9 @@ function createDynamic() {
     won: false,
     activeInhibitors: new Set<number>(),
     statusEffects: Player.createEffects(),
+    projectiles: [] as Projectile.Projectile[],
+    fireTimers: {} as Record<number, number>,
+    aimAngles: {} as Record<number, number>,
   };
 }
 
@@ -34,6 +40,15 @@ export function create() {
 
 type Level = ReturnType<typeof create>;
 type PlayerT = ReturnType<typeof Player.create>;
+type ParticleSystem = ReturnType<typeof Particles.create>;
+
+const CANNON_FIRE_INTERVAL = 1500;
+const MISSILE_FIRE_INTERVAL = 2500;
+const MUZZLE_OFFSET = 1.8;
+const TRAIL_EMIT_INTERVAL = 12;
+const TURRET_TURN_RATE = 0.004;
+const TURRET_REST_ANGLE = -Math.PI / 2;
+const WARN_FRACTION = 0.7;
 
 export function resetDynamic(level: Level) {
   level.dynamic = createDynamic();
@@ -229,6 +244,14 @@ export function anyTransmitting(level: Level) {
   return false;
 }
 
+function isInhibitorType(type: Satellite.SatelliteType) {
+  return (
+    type === "thrust-inhibitor" ||
+    type === "turn-inhibitor" ||
+    type === "control-reverser"
+  );
+}
+
 export function computeStatus(level: Level, player: PlayerT, enabled: boolean) {
   level.dynamic.activeInhibitors.clear();
   const e = level.dynamic.statusEffects;
@@ -236,7 +259,7 @@ export function computeStatus(level: Level, player: PlayerT, enabled: boolean) {
   if (!enabled || !player.alive || level.dynamic.won) return;
   for (let i = 0; i < level.satellites.length; i++) {
     const sat = level.satellites[i]!;
-    if (sat.type === "transmission-node") continue;
+    if (!isInhibitorType(sat.type)) continue;
     if (!losClear(level, player.x, player.y, sat.x, sat.y)) continue;
     level.dynamic.activeInhibitors.add(i);
     if (sat.type === "thrust-inhibitor") e.thrustDisabled = true;
@@ -245,7 +268,12 @@ export function computeStatus(level: Level, player: PlayerT, enabled: boolean) {
   }
 }
 
-export function update(level: Level, player: PlayerT, dt: number) {
+export function update(
+  level: Level,
+  player: PlayerT,
+  particles: ParticleSystem,
+  dt: number,
+) {
   if (!player.alive || level.dynamic.won) return;
   const indices = nodeIndices(level);
   for (const i of indices) {
@@ -268,11 +296,230 @@ export function update(level: Level, player: PlayerT, dt: number) {
   ) {
     level.dynamic.won = true;
   }
+
+  updateShooters(level, player, dt);
+  updateProjectiles(level, player, particles, dt);
+}
+
+function updateShooters(level: Level, player: PlayerT, dt: number) {
+  for (let i = 0; i < level.satellites.length; i++) {
+    const sat = level.satellites[i]!;
+    if (sat.type !== "cannon" && sat.type !== "missile-launcher") continue;
+    const hasLOS = losClear(level, sat.x, sat.y, player.x, player.y);
+    const started = player.hasThrusted;
+
+    const current = level.dynamic.aimAngles[i] ?? TURRET_REST_ANGLE;
+    let target: number;
+    if (!started) target = TURRET_REST_ANGLE;
+    else if (hasLOS)
+      target = Math.atan2(player.y - sat.y, player.x - sat.x);
+    else target = current;
+    let diff = target - current;
+    while (diff > Math.PI) diff -= 2 * Math.PI;
+    while (diff < -Math.PI) diff += 2 * Math.PI;
+    const maxTurn = TURRET_TURN_RATE * dt;
+    const turn = diff > maxTurn ? maxTurn : diff < -maxTurn ? -maxTurn : diff;
+    level.dynamic.aimAngles[i] = current + turn;
+
+    if (!started || !hasLOS) {
+      level.dynamic.fireTimers[i] = 0;
+      continue;
+    }
+
+    if (sat.type === "missile-launcher" && hasLiveMissileFrom(level, i)) {
+      level.dynamic.fireTimers[i] = 0;
+      continue;
+    }
+
+    const interval =
+      sat.type === "cannon" ? CANNON_FIRE_INTERVAL : MISSILE_FIRE_INTERVAL;
+    const oldT = level.dynamic.fireTimers[i] ?? 0;
+    const newT = oldT + dt;
+    const warnAt = interval * WARN_FRACTION;
+    if (oldT < warnAt && newT >= warnAt) Sound.sfx.projectileWarn();
+    if (newT >= interval) {
+      fireProjectile(level, i, sat, player);
+      if (sat.type === "cannon") Sound.sfx.cannonFire();
+      else Sound.sfx.missileFire();
+      level.dynamic.fireTimers[i] = newT - interval;
+    } else {
+      level.dynamic.fireTimers[i] = newT;
+    }
+  }
+}
+
+function hasLiveMissileFrom(level: Level, ownerIdx: number) {
+  for (const p of level.dynamic.projectiles) {
+    if (p.alive && p.kind === "missile" && p.ownerIdx === ownerIdx) return true;
+  }
+  return false;
+}
+
+function fireProjectile(
+  level: Level,
+  ownerIdx: number,
+  sat: Satellite.Satellite,
+  player: PlayerT,
+) {
+  const dx = player.x - sat.x;
+  const dy = player.y - sat.y;
+  const angle = Math.atan2(dy, dx);
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const kind: Projectile.ProjectileKind =
+    sat.type === "cannon" ? "fireball" : "missile";
+  const speed =
+    kind === "fireball" ? Projectile.FIREBALL_SPEED : Projectile.MISSILE_SPEED;
+  level.dynamic.projectiles.push({
+    kind,
+    x: sat.x + cos * MUZZLE_OFFSET,
+    y: sat.y + sin * MUZZLE_OFFSET,
+    vx: cos * speed,
+    vy: sin * speed,
+    angle,
+    alive: true,
+    emitAccum: 0,
+    ownerIdx,
+  });
+}
+
+function updateProjectiles(
+  level: Level,
+  player: PlayerT,
+  particles: ParticleSystem,
+  dt: number,
+) {
+  const list = level.dynamic.projectiles;
+  for (const p of list) {
+    if (!p.alive) continue;
+
+    if (p.kind === "missile") {
+      const dx = player.x - p.x;
+      const dy = player.y - p.y;
+      const targetAngle = Math.atan2(dy, dx);
+      let diff = targetAngle - p.angle;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      const maxTurn = Projectile.MISSILE_TURN_RATE * dt;
+      const actualTurn =
+        diff > maxTurn ? maxTurn : diff < -maxTurn ? -maxTurn : diff;
+      p.angle += actualTurn;
+      p.vx = Math.cos(p.angle) * Projectile.MISSILE_SPEED;
+      p.vy = Math.sin(p.angle) * Projectile.MISSILE_SPEED;
+    }
+
+    const prevX = p.x;
+    const prevY = p.y;
+    const newX = p.x + p.vx * dt;
+    const newY = p.y + p.vy * dt;
+
+    const wallT = firstWallHitT(level, prevX, prevY, newX, newY);
+    if (wallT <= 1) {
+      p.x = prevX + (newX - prevX) * wallT;
+      p.y = prevY + (newY - prevY) * wallT;
+      p.alive = false;
+      emitExplosion(particles, p);
+      continue;
+    }
+
+    p.x = newX;
+    p.y = newY;
+
+    if (projectileHitsPlayer(player, prevX, prevY, p.x, p.y)) {
+      p.alive = false;
+      emitExplosion(particles, p);
+      player.alive = false;
+      continue;
+    }
+
+    p.emitAccum += dt;
+    while (p.emitAccum >= TRAIL_EMIT_INTERVAL) {
+      p.emitAccum -= TRAIL_EMIT_INTERVAL;
+      emitTrail(particles, p);
+    }
+  }
+
+  for (let i = list.length - 1; i >= 0; i--) {
+    if (!list[i]!.alive) list.splice(i, 1);
+  }
+}
+
+function projectileHitsPlayer(
+  player: PlayerT,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+) {
+  const c = Player.corners(player);
+  for (let i = 0; i < 4; i++) {
+    const a = c[i]!;
+    const b = c[(i + 1) % 4]!;
+    if (segmentsIntersect(x1, y1, x2, y2, a.x, a.y, b.x, b.y)) return true;
+  }
+  return false;
+}
+
+function emitTrail(particles: ParticleSystem, p: Projectile.Projectile) {
+  const jitter = 0.3;
+  const jx = (Math.random() - 0.5) * jitter;
+  const jy = (Math.random() - 0.5) * jitter;
+  if (p.kind === "fireball") {
+    Particles.emit(particles, {
+      x: p.x + jx,
+      y: p.y + jy,
+      vx: -p.vx * 0.15,
+      vy: -p.vy * 0.15,
+      life: randRange(200, 450),
+      size: randRange(0.35, 0.7),
+      r: 255,
+      g: randRange(100, 180),
+      b: randRange(30, 60),
+    });
+  } else {
+    const shade = 150 + Math.random() * 70;
+    Particles.emit(particles, {
+      x: p.x + jx,
+      y: p.y + jy,
+      vx: -p.vx * 0.1,
+      vy: -p.vy * 0.1,
+      life: randRange(400, 800),
+      size: randRange(0.3, 0.6),
+      r: shade,
+      g: shade,
+      b: shade,
+    });
+  }
+}
+
+function emitExplosion(particles: ParticleSystem, p: Projectile.Projectile) {
+  const count = p.kind === "fireball" ? 22 : 32;
+  for (let i = 0; i < count; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const speed = randRange(0.002, 0.009);
+    Particles.emit(particles, {
+      x: p.x,
+      y: p.y,
+      vx: Math.cos(a) * speed,
+      vy: Math.sin(a) * speed,
+      life: randRange(300, 750),
+      size: randRange(0.4, 1.0),
+      r: 255,
+      g: Math.floor(randRange(80, 180)),
+      b: Math.floor(randRange(20, 60)),
+    });
+  }
+}
+
+export function drawProjectiles(level: Level, ctx: CanvasRenderingContext2D) {
+  for (const p of level.dynamic.projectiles) Projectile.draw(ctx, p);
 }
 
 const CHECKER_CELL = 5;
 let checkerPattern: CanvasPattern | null = null;
-function getCheckerPattern(ctx: CanvasRenderingContext2D): CanvasPattern | null {
+function getCheckerPattern(
+  ctx: CanvasRenderingContext2D,
+): CanvasPattern | null {
   if (checkerPattern) return checkerPattern;
   const PX_PER_UNIT = 16;
   const tile = document.createElement("canvas");
@@ -325,7 +572,16 @@ export function draw(level: Level, ctx: CanvasRenderingContext2D) {
     const faded =
       sat.type === "transmission-node" && level.dynamic.completedNodes.has(i);
     if (faded) ctx.globalAlpha = 0.25;
-    Satellite.draw(ctx, sat, !faded);
+    let aim: number | undefined;
+    let charge = 0;
+    if (sat.type === "cannon" || sat.type === "missile-launcher") {
+      aim = level.dynamic.aimAngles[i] ?? TURRET_REST_ANGLE;
+      const interval =
+        sat.type === "cannon" ? CANNON_FIRE_INTERVAL : MISSILE_FIRE_INTERVAL;
+      const timer = level.dynamic.fireTimers[i] ?? 0;
+      charge = Math.min(1, timer / interval);
+    }
+    Satellite.draw(ctx, sat, !faded, aim, charge);
     if (faded) ctx.globalAlpha = 1;
   }
 }
@@ -408,13 +664,13 @@ export function drawInhibitorFX(
   if (!player.alive || level.dynamic.won) return;
   const now = performance.now();
   const phase =
-    ((now * INHIBITOR_DOT_SPEED) % INHIBITOR_DOT_PERIOD +
+    (((now * INHIBITOR_DOT_SPEED) % INHIBITOR_DOT_PERIOD) +
       INHIBITOR_DOT_PERIOD) %
     INHIBITOR_DOT_PERIOD;
 
   for (let i = 0; i < level.satellites.length; i++) {
     const sat = level.satellites[i]!;
-    if (sat.type === "transmission-node") continue;
+    if (!isInhibitorType(sat.type)) continue;
     const color = Satellite.TYPE_COLORS[sat.type];
     const active = level.dynamic.activeInhibitors.has(i);
 

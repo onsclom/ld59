@@ -344,4 +344,15 @@ export const sfx = {
     setTimeout(() => playTone(784, 0.14, "triangle", 0.3), 240);
     setTimeout(() => playTone(1046, 0.45, "triangle", 0.3), 360);
   },
+  cannonFire: () => {
+    playNoise(0.22, 900, 0.4);
+    playBlip(210, 55, 0.32, "sawtooth", 0.28);
+  },
+  missileFire: () => {
+    playNoise(0.55, 3800, 0.22);
+    playBlip(380, 120, 0.45, "triangle", 0.18);
+  },
+  projectileWarn: () => {
+    playTone(720, 0.06, "square", 0.07);
+  },
 };
