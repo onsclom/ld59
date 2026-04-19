@@ -683,9 +683,11 @@ export function fillInside(
   ctx: CanvasRenderingContext2D,
   cameraX: number,
   cameraY: number,
+  alpha = 1,
 ) {
   const poly = getPerimeter(level);
   if (!poly || poly.length < 3) return;
+  if (alpha <= 0) return;
   const pat = getNoisePattern(ctx);
   if (pat) {
     const offsetX = (1 - NOISE_PARALLAX) * cameraX;
@@ -696,6 +698,8 @@ export function fillInside(
         .scale(1 / NOISE_PX_PER_UNIT, 1 / NOISE_PX_PER_UNIT),
     );
   }
+  const prevAlpha = ctx.globalAlpha;
+  if (alpha < 1) ctx.globalAlpha = prevAlpha * alpha;
   ctx.fillStyle =
     pat ?? `rgb(${NOISE_BASE[0]}, ${NOISE_BASE[1]}, ${NOISE_BASE[2]})`;
   ctx.beginPath();
@@ -703,6 +707,7 @@ export function fillInside(
   for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i]!.x, poly[i]!.y);
   ctx.closePath();
   ctx.fill();
+  if (alpha < 1) ctx.globalAlpha = prevAlpha;
 }
 
 export function fillOutside(
@@ -710,9 +715,11 @@ export function fillOutside(
   ctx: CanvasRenderingContext2D,
   cameraX: number,
   cameraY: number,
+  alpha = 1,
 ) {
   const poly = getPerimeter(level);
   if (!poly || poly.length < 3) return;
+  if (alpha <= 0) return;
   const pat = getCheckerPattern(ctx);
   if (pat) {
     // Scale source pixels to world units, then offset by (1 - parallax) *
@@ -726,6 +733,8 @@ export function fillOutside(
         .scale(1 / CHECKER_PX_PER_UNIT, 1 / CHECKER_PX_PER_UNIT),
     );
   }
+  const prevAlpha = ctx.globalAlpha;
+  if (alpha < 1) ctx.globalAlpha = prevAlpha * alpha;
   ctx.fillStyle = pat ?? CHECKER_DARK;
   ctx.beginPath();
   ctx.rect(-1e6, -1e6, 2e6, 2e6);
@@ -733,7 +742,9 @@ export function fillOutside(
   for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i]!.x, poly[i]!.y);
   ctx.closePath();
   ctx.fill("evenodd");
+  if (alpha < 1) ctx.globalAlpha = prevAlpha;
 }
+
 
 export type IntroProgress = {
   wall: (i: number) => number;

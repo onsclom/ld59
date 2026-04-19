@@ -495,17 +495,26 @@ startLoop(canvas, (ctx, dt) => {
     if (state.edit.active) Transitions.apply(state, action);
     else Transitions.begin(state.transition, action);
   }
-  if (!inputLocked && Input.keysJustPressed.has("e")) {
+  const won = state.level.dynamic.won;
+  const wonAndPlayable = !state.edit.active && won;
+  const anyInputPressed =
+    Input.keysJustPressed.size > 0 || Input.mouse.justLeftClicked;
+  const advancePressed =
+    !inputLocked &&
+    (wonAndPlayable ? anyInputPressed : Input.keysJustPressed.has("e"));
+  let advancedFromWin = false;
+  if (advancePressed) {
     const onLast = state.currentLevelIndex === state.levels.length - 1;
-    const won = state.level.dynamic.won;
     if (!state.edit.active && won && onLast) {
       state.phase = "end";
       Sound.sfx.advance();
+      advancedFromWin = true;
     } else if (DEV_MODE || (!state.edit.active && won)) {
       const action = { kind: "switchLevel" as const, dir: 1 };
       if (state.edit.active) Transitions.apply(state, action);
       else Transitions.begin(state.transition, action);
       Sound.sfx.advance();
+      advancedFromWin = wonAndPlayable;
     }
   }
 
@@ -514,7 +523,7 @@ startLoop(canvas, (ctx, dt) => {
     if (Input.keysJustPressed.has("x")) deleteCurrentLevel();
   }
 
-  if (!inputLocked && Input.keysJustPressed.has("r")) {
+  if (!advancedFromWin && !inputLocked && Input.keysJustPressed.has("r")) {
     const wasEdit = state.edit.active;
     state.edit.active = false;
     state.edit.pendingStart = null;
@@ -634,9 +643,24 @@ startLoop(canvas, (ctx, dt) => {
       }
     }
 
+    const bgAlpha = introActiveNow
+      ? LevelIntro.bgAlpha(state.levelIntro)
+      : 1;
     if (!state.edit.active) {
-      Level.fillInside(state.level, ctx, state.camera.x, state.camera.y);
-      Level.fillOutside(state.level, ctx, state.camera.x, state.camera.y);
+      Level.fillInside(
+        state.level,
+        ctx,
+        state.camera.x,
+        state.camera.y,
+        bgAlpha,
+      );
+      Level.fillOutside(
+        state.level,
+        ctx,
+        state.camera.x,
+        state.camera.y,
+        bgAlpha,
+      );
     }
     const introForDraw = introActiveNow
       ? {
@@ -753,8 +777,8 @@ startLoop(canvas, (ctx, dt) => {
 
       ctx.font = "bold 22px monospace";
       ctx.fillStyle = "#cfe7ff";
-      ctx.strokeText("E TO CONTINUE", cx, cy + 64);
-      ctx.fillText("E TO CONTINUE", cx, cy + 64);
+      ctx.strokeText("PRESS ANY KEY", cx, cy + 64);
+      ctx.fillText("PRESS ANY KEY", cx, cy + 64);
       ctx.restore();
     } else if (!state.player.alive) {
       ctx.save();

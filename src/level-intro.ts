@@ -17,6 +17,7 @@ const JITTER_MS = 90;
 const SAT_OFFSET_MS = 60;
 const TAIL_MS = 160;
 const DECAY_K = 3.5;
+const BG_FADE_FRACTION = 0.6;
 
 type LevelLike = {
   walls: { x1: number; y1: number; x2: number; y2: number }[];
@@ -110,4 +111,10 @@ export function playerProgress(intro: LevelIntro): number {
     intro.t,
     intro.perElementDuration,
   );
+}
+
+export function bgAlpha(intro: LevelIntro): number {
+  if (!intro.active) return 1;
+  const fadeMs = Math.max(1, intro.duration * BG_FADE_FRACTION);
+  return clamp(intro.t / fadeMs, 0, 1);
 }
