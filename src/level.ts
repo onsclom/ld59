@@ -735,29 +735,72 @@ export function fillOutside(
   ctx.fill("evenodd");
 }
 
-export function draw(level: Level, ctx: CanvasRenderingContext2D) {
+export type IntroProgress = {
+  wall: (i: number) => number;
+  sat: (i: number) => number;
+};
+
+export function draw(
+  level: Level,
+  ctx: CanvasRenderingContext2D,
+  intro?: IntroProgress,
+) {
   ctx.lineCap = "round";
-  ctx.beginPath();
-  for (const w of level.walls) {
-    ctx.moveTo(w.x1, w.y1);
-    ctx.lineTo(w.x2, w.y2);
+
+  if (!intro) {
+    ctx.beginPath();
+    for (const w of level.walls) {
+      ctx.moveTo(w.x1, w.y1);
+      ctx.lineTo(w.x2, w.y2);
+    }
+    ctx.strokeStyle = "rgba(255, 90, 90, 0.08)";
+    ctx.lineWidth = 2.0;
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(255, 110, 110, 0.18)";
+    ctx.lineWidth = 1.0;
+    ctx.stroke();
+    ctx.strokeStyle = "#ff5a5a";
+    ctx.lineWidth = 0.4;
+    ctx.stroke();
+  } else {
+    for (let i = 0; i < level.walls.length; i++) {
+      const w = level.walls[i]!;
+      const p = intro.wall(i);
+      if (p <= 0) continue;
+      const mx = (w.x1 + w.x2) / 2;
+      const my = (w.y1 + w.y2) / 2;
+      const x1 = mx + (w.x1 - mx) * p;
+      const y1 = my + (w.y1 - my) * p;
+      const x2 = mx + (w.x2 - mx) * p;
+      const y2 = my + (w.y2 - my) * p;
+      ctx.globalAlpha = p;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.strokeStyle = "rgba(255, 90, 90, 0.08)";
+      ctx.lineWidth = 2.0;
+      ctx.stroke();
+      ctx.strokeStyle = "rgba(255, 110, 110, 0.18)";
+      ctx.lineWidth = 1.0;
+      ctx.stroke();
+      ctx.strokeStyle = "#ff5a5a";
+      ctx.lineWidth = 0.4;
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
   }
-  ctx.strokeStyle = "rgba(255, 90, 90, 0.08)";
-  ctx.lineWidth = 2.0;
-  ctx.stroke();
-  ctx.strokeStyle = "rgba(255, 110, 110, 0.18)";
-  ctx.lineWidth = 1.0;
-  ctx.stroke();
-  ctx.strokeStyle = "#ff5a5a";
-  ctx.lineWidth = 0.4;
-  ctx.stroke();
 
   const seen = new Set<string>();
   ctx.fillStyle = "#ff9a3a";
-  for (const w of level.walls) {
+  const vertexThreshold = 0.85;
+  for (let i = 0; i < level.walls.length; i++) {
+    const w = level.walls[i]!;
+    const p = intro ? intro.wall(i) : 1;
+    if (p < vertexThreshold) continue;
     const kA = `${w.x1}|${w.y1}`;
     if (!seen.has(kA)) {
       seen.add(kA);
+      if (intro) ctx.globalAlpha = p;
       ctx.beginPath();
       ctx.arc(w.x1, w.y1, 0.4, 0, Math.PI * 2);
       ctx.fill();
@@ -765,16 +808,20 @@ export function draw(level: Level, ctx: CanvasRenderingContext2D) {
     const kB = `${w.x2}|${w.y2}`;
     if (!seen.has(kB)) {
       seen.add(kB);
+      if (intro) ctx.globalAlpha = p;
       ctx.beginPath();
       ctx.arc(w.x2, w.y2, 0.4, 0, Math.PI * 2);
       ctx.fill();
     }
   }
+  if (intro) ctx.globalAlpha = 1;
+
   for (let i = 0; i < level.satellites.length; i++) {
     const sat = level.satellites[i]!;
+    const sp = intro ? intro.sat(i) : 1;
+    if (sp <= 0) continue;
     const faded =
       sat.type === "transmission-node" && level.dynamic.completedNodes.has(i);
-    if (faded) ctx.globalAlpha = 0.25;
     let aim: number | undefined;
     let charge = 0;
     if (sat.type === "cannon" || sat.type === "missile-launcher") {
@@ -784,8 +831,19 @@ export function draw(level: Level, ctx: CanvasRenderingContext2D) {
       const timer = level.dynamic.fireTimers[i] ?? 0;
       charge = Math.min(1, timer / interval);
     }
+    ctx.save();
+    if (sp < 1) {
+      const overshoot = 1 + 0.15 * Math.sin(sp * Math.PI);
+      const s = sp * overshoot;
+      ctx.translate(sat.x, sat.y);
+      ctx.scale(s, s);
+      ctx.translate(-sat.x, -sat.y);
+      ctx.globalAlpha = sp;
+    } else if (faded) {
+      ctx.globalAlpha = 0.25;
+    }
     Satellite.draw(ctx, sat, !faded, aim, charge);
-    if (faded) ctx.globalAlpha = 1;
+    ctx.restore();
   }
 }
 

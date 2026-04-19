@@ -3,11 +3,16 @@ import * as Camera from "./camera";
 import * as Edit from "./edit";
 import * as Input from "./input";
 import * as Level from "./level";
+import * as LevelIntro from "./level-intro";
 import * as Particles from "./particles";
 import * as Player from "./player";
 import * as Satellite from "./satellite";
 import * as Sound from "./sound";
 import * as Transitions from "./transitions";
+
+const DEV_MODE =
+  process.env.NODE_ENV !== "production" ||
+  new URLSearchParams(window.location.search).has("dev");
 
 let canvas = document.querySelector<HTMLCanvasElement>("canvas");
 if (!canvas) {
@@ -26,6 +31,7 @@ function createInitState() {
     level: levels[0]!,
     edit: Edit.create(),
     transition: Transitions.create(),
+    levelIntro: LevelIntro.create(),
     gameStartedAt: performance.now(),
     phase: "title" as "title" | "intro" | "playing" | "end",
   };
@@ -163,7 +169,7 @@ const titleEffects = Player.createEffects();
 const INTRO_MESSAGES = [
   "YOU ARE THE TRANSMITTER",
   "YOUR TASK IS TO COLLECT SIGNALS FROM TRANSMISSION NODES",
-  "THESE SIGNALS SAVE WILL SAVE EARTH FROM IMPENDING DOOM",
+  "THESE SIGNALS WILL SAVE EARTH FROM IMPENDING DOOM",
   "WASD OR ARROW KEYS TO FLY YOUR SHIP",
 ];
 const INTRO_CHAR_INTERVAL_MS = 35;
@@ -471,7 +477,7 @@ startLoop(canvas, (ctx, dt) => {
     return;
   }
 
-  if (Input.keysJustPressed.has("Shift")) {
+  if (DEV_MODE && Input.keysJustPressed.has("Shift")) {
     state.edit.active = !state.edit.active;
     if (state.edit.active) {
       state.edit.cameraX = state.player.x;
@@ -481,18 +487,21 @@ startLoop(canvas, (ctx, dt) => {
   }
 
   const transitionLocked = Transitions.isLocked(state.transition);
+  const introActive = LevelIntro.isActive(state.levelIntro);
+  const inputLocked = transitionLocked || introActive;
 
-  if (!transitionLocked && Input.keysJustPressed.has("q")) {
+  if (DEV_MODE && !inputLocked && Input.keysJustPressed.has("q")) {
     const action = { kind: "switchLevel" as const, dir: -1 };
     if (state.edit.active) Transitions.apply(state, action);
     else Transitions.begin(state.transition, action);
   }
-  if (!transitionLocked && Input.keysJustPressed.has("e")) {
+  if (!inputLocked && Input.keysJustPressed.has("e")) {
     const onLast = state.currentLevelIndex === state.levels.length - 1;
-    if (!state.edit.active && state.level.dynamic.won && onLast) {
+    const won = state.level.dynamic.won;
+    if (!state.edit.active && won && onLast) {
       state.phase = "end";
       Sound.sfx.advance();
-    } else {
+    } else if (DEV_MODE || (!state.edit.active && won)) {
       const action = { kind: "switchLevel" as const, dir: 1 };
       if (state.edit.active) Transitions.apply(state, action);
       else Transitions.begin(state.transition, action);
@@ -505,7 +514,7 @@ startLoop(canvas, (ctx, dt) => {
     if (Input.keysJustPressed.has("x")) deleteCurrentLevel();
   }
 
-  if (!transitionLocked && Input.keysJustPressed.has("r")) {
+  if (!inputLocked && Input.keysJustPressed.has("r")) {
     const wasEdit = state.edit.active;
     state.edit.active = false;
     state.edit.pendingStart = null;
@@ -516,8 +525,10 @@ startLoop(canvas, (ctx, dt) => {
   }
 
   Transitions.update(state.transition, state, dt);
+  LevelIntro.update(state.levelIntro, dt);
+  const introActiveNow = LevelIntro.isActive(state.levelIntro);
 
-  if (!state.edit.active && !state.level.dynamic.won) {
+  if (!state.edit.active && !state.level.dynamic.won && !introActiveNow) {
     state.level.stats.timeMs += dt;
   }
 
@@ -525,6 +536,11 @@ startLoop(canvas, (ctx, dt) => {
     state.player.thrusting = false;
     Edit.update(state.edit, state.level, state.player, state.camera, rect, dt);
     Level.computeStatus(state.level, state.player, false);
+  } else if (introActiveNow) {
+    state.player.thrusting = false;
+    Level.computeStatus(state.level, state.player, false);
+    state.camera.x = state.player.x;
+    state.camera.y = state.player.y;
   } else {
     Level.computeStatus(state.level, state.player, true);
     const frozen = !state.player.alive || state.level.dynamic.won;
@@ -618,18 +634,38 @@ startLoop(canvas, (ctx, dt) => {
       }
     }
 
-    Level.fillInside(state.level, ctx, state.camera.x, state.camera.y);
-    Level.fillOutside(state.level, ctx, state.camera.x, state.camera.y);
-    Level.draw(state.level, ctx);
     if (!state.edit.active) {
+      Level.fillInside(state.level, ctx, state.camera.x, state.camera.y);
+      Level.fillOutside(state.level, ctx, state.camera.x, state.camera.y);
+    }
+    const introForDraw = introActiveNow
+      ? {
+          wall: (i: number) => LevelIntro.wallProgress(state.levelIntro, i),
+          sat: (i: number) => LevelIntro.satelliteProgress(state.levelIntro, i),
+        }
+      : undefined;
+    Level.draw(state.level, ctx, introForDraw);
+    if (!state.edit.active && !introActiveNow) {
       Level.drawTransmissionFX(state.level, state.player, ctx);
       Level.drawInhibitorFX(state.level, state.player, ctx);
     }
     Particles.draw(state.particles, ctx);
     Level.drawProjectiles(state.level, ctx);
-    if (state.edit.active) ctx.globalAlpha = 0.3;
-    Player.draw(state.player, ctx, state.level.dynamic.statusEffects);
-    ctx.globalAlpha = 1;
+    const playerP = introActiveNow
+      ? LevelIntro.playerProgress(state.levelIntro)
+      : 1;
+    if (playerP > 0) {
+      ctx.save();
+      if (state.edit.active) ctx.globalAlpha = 0.3;
+      else if (playerP < 1) {
+        ctx.globalAlpha = playerP;
+        ctx.translate(state.player.x, state.player.y);
+        ctx.scale(playerP, playerP);
+        ctx.translate(-state.player.x, -state.player.y);
+      }
+      Player.draw(state.player, ctx, state.level.dynamic.statusEffects);
+      ctx.restore();
+    }
     Edit.drawWorld(state.edit, state.level, ctx, rect, state.camera);
   });
 

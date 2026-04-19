@@ -1,5 +1,6 @@
 import { clamp, mod } from "./game-math";
 import * as Level from "./level";
+import * as LevelIntro from "./level-intro";
 import * as Particles from "./particles";
 import * as Player from "./player";
 
@@ -24,6 +25,7 @@ type WorldState = {
   levels: ReturnType<typeof Level.create>[];
   currentLevelIndex: number;
   particles: ReturnType<typeof Particles.create>;
+  levelIntro: LevelIntro.LevelIntro;
   phase: "title" | "intro" | "playing" | "end";
 };
 
@@ -73,7 +75,22 @@ export function update(
   if (transition.phase === "idle") return;
   transition.t += dt;
   if (transition.phase === "out" && transition.t >= transition.outDuration) {
-    if (transition.action) apply(state, transition.action);
+    if (transition.action) {
+      const action = transition.action;
+      apply(state, action);
+      if (
+        action.kind === "restart" ||
+        action.kind === "switchLevel" ||
+        action.kind === "startPlaying"
+      ) {
+        LevelIntro.start(
+          state.levelIntro,
+          state.level,
+          state.player.x,
+          state.player.y,
+        );
+      }
+    }
     transition.phase = "in";
     transition.t = 0;
   } else if (
