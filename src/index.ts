@@ -14,6 +14,8 @@ const DEV_MODE =
   process.env.NODE_ENV !== "production" ||
   new URLSearchParams(window.location.search).has("dev");
 
+const COVER_MODE = new URLSearchParams(window.location.search).has("cover");
+
 let canvas = document.querySelector<HTMLCanvasElement>("canvas");
 if (!canvas) {
   canvas = document.createElement("canvas");
@@ -188,6 +190,42 @@ titlePlayer.thrusting = true;
 titlePlayer.hasThrusted = true;
 const titleEffects = Player.createEffects();
 
+let coverNoisePattern: CanvasPattern | null = null;
+function getCoverNoisePattern(
+  ctx: CanvasRenderingContext2D,
+): CanvasPattern | null {
+  if (coverNoisePattern) return coverNoisePattern;
+  const N = 192;
+  const tile = document.createElement("canvas");
+  tile.width = N;
+  tile.height = N;
+  const tctx = tile.getContext("2d");
+  if (!tctx) return null;
+  const img = tctx.createImageData(N, N);
+  const data = img.data;
+  let s = 0x9e3779b9;
+  const rand = () => {
+    s = (Math.imul(s, 1664525) + 1013904223) | 0;
+    return ((s >>> 8) & 0xffffff) / 0x1000000;
+  };
+  for (let i = 0; i < data.length; i += 4) {
+    const r = rand();
+    let dv = 0;
+    if (r < 0.08) dv = Math.floor(rand() * 10) + 4;
+    else if (r > 0.995) dv = Math.floor(rand() * 18) + 14;
+    else dv = Math.floor(rand() * 4) - 1;
+    data[i] = Math.max(0, Math.min(255, 20 + dv));
+    data[i + 1] = Math.max(0, Math.min(255, 20 + dv));
+    data[i + 2] = Math.max(0, Math.min(255, 21 + dv));
+    data[i + 3] = 255;
+  }
+  tctx.putImageData(img, 0, 0);
+  const pat = ctx.createPattern(tile, "repeat");
+  if (!pat) return null;
+  coverNoisePattern = pat;
+  return pat;
+}
+
 const INTRO_MESSAGES = [
   "YOU ARE THE TRANSMITTER",
   "YOUR TASK IS TO COLLECT SIGNALS FROM TRANSMISSION NODES",
@@ -276,13 +314,43 @@ function drawIntroScreen(ctx: CanvasRenderingContext2D, rect: DOMRect) {
 }
 
 function drawTitleScreen(ctx: CanvasRenderingContext2D, rect: DOMRect) {
+  const cx = rect.width / 2;
+  const cy = rect.height / 2;
+
+  if (COVER_MODE) {
+    const pat = getCoverNoisePattern(ctx);
+    ctx.fillStyle = pat ?? "#141414";
+    ctx.fillRect(0, 0, rect.width, rect.height);
+
+    titlePlayer.rotation = 0;
+    const rocketScale = Math.min(rect.width, rect.height) / 10.5;
+    ctx.save();
+    ctx.translate(cx, cy - 60);
+    ctx.scale(rocketScale, rocketScale);
+    Player.draw(titlePlayer, ctx, titleEffects);
+    ctx.restore();
+
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.lineJoin = "round";
+    ctx.miterLimit = 2;
+    ctx.strokeStyle = "rgba(0,0,0,0.9)";
+    ctx.font = "bold 46px monospace";
+    ctx.lineWidth = 6;
+    ctx.fillStyle = "#9cffcf";
+    const titleY = rect.height - 42;
+    ctx.strokeText("THE TRANSMITTER", cx, titleY);
+    ctx.fillText("THE TRANSMITTER", cx, titleY);
+    ctx.restore();
+    return;
+  }
+
   const t = performance.now();
   titlePlayer.rotation = Math.sin(t / 1800) * 0.22;
   const bobX = Math.sin(t / 1400) * 0.5;
   const bobY = Math.sin(t / 900) * 0.7;
 
-  const cx = rect.width / 2;
-  const cy = rect.height / 2;
   const rocketScale = Math.min(rect.width, rect.height) / 9;
 
   ctx.save();
