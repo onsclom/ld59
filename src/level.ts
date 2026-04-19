@@ -28,6 +28,7 @@ function createDynamic() {
     nodeProgress: {} as Record<number, number>,
     completedNodes: new Set<number>(),
     won: false,
+    wonAtMs: null as number | null,
     activeInhibitors: new Set<number>(),
     statusEffects: Player.createEffects(),
     projectiles: [] as Projectile.Projectile[],
@@ -311,6 +312,7 @@ export function update(
     level.dynamic.completedNodes.size === indices.length
   ) {
     level.dynamic.won = true;
+    level.dynamic.wonAtMs = performance.now();
   }
 
   updateShooters(level, player, dt);
@@ -516,8 +518,8 @@ function projectilesCollide(a: Projectile.Projectile, b: Projectile.Projectile) 
 }
 
 function projectileHitsPlayer(player: PlayerT, p: Projectile.Projectile) {
-  const phw = player.width / 2;
-  const phh = player.height / 2;
+  const phw = Player.hitboxHalfW(player);
+  const phh = Player.hitboxHalfH(player);
   if (p.kind === "fireball") {
     return circleOverlapsObb(
       p.x,

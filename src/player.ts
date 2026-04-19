@@ -116,6 +116,12 @@ const COLOR_NOZZLE_THROAT = "#050505";
 const COLOR_NOZZLE_HEAT = "rgba(255, 120, 40, 0.65)";
 const COLOR_DEAD_OVERLAY = "rgba(255, 40, 40, 0.55)";
 
+const INVULN_PULSE_PERIOD_MS = 900;
+const INVULN_ALPHA_MIN = 0.18;
+const INVULN_ALPHA_MAX = 0.5;
+
+const HITBOX_SCALE = 0.8;
+
 const FLAME_FLICKER_PERIOD_MS = 28;
 const FLAME_LEN_OUTER = 1.8;
 const FLAME_LEN_MIDDLE = 1.2;
@@ -162,11 +168,19 @@ export function reset(player: Player) {
   player.denyFlash = 0;
 }
 
+export function hitboxHalfW(player: Player) {
+  return (player.width / 2) * HITBOX_SCALE;
+}
+
+export function hitboxHalfH(player: Player) {
+  return (player.height / 2) * HITBOX_SCALE;
+}
+
 export function corners(player: Player) {
   const sinR = Math.sin(player.rotation);
   const cosR = Math.cos(player.rotation);
-  const hw = player.width / 2;
-  const hh = player.height / 2;
+  const hw = hitboxHalfW(player);
+  const hh = hitboxHalfH(player);
   const local: [number, number][] = [
     [-hw, -hh],
     [hw, -hh],
@@ -353,6 +367,8 @@ export function draw(
     ctx.fillStyle = COLOR_DEAD_OVERLAY;
     ctx.fillRect(-hw, -hh, w, h);
   }
+
+  if (player.alive && !player.hasThrusted) drawInvulnerableSheen(ctx, w, h, hw, hh);
 
   drawStatusRings(ctx, w, h, effects);
   drawDenyFlash(ctx, w, h, player.denyFlash);
@@ -727,6 +743,66 @@ function drawStatusRings(
     inset += 0.35;
   }
   ctx.globalAlpha = 1;
+}
+
+function buildShipSilhouette(
+  ctx: CanvasRenderingContext2D,
+  hw: number,
+  hh: number,
+) {
+  const top = -hh;
+  const bottom = hh;
+  const shoulderY = top + NOSE_LEN;
+
+  ctx.beginPath();
+  ctx.moveTo(0, top);
+  ctx.lineTo(hw, shoulderY);
+  ctx.lineTo(hw, bottom);
+  ctx.lineTo(-hw, bottom);
+  ctx.lineTo(-hw, shoulderY);
+  ctx.closePath();
+
+  for (const sign of [-1, 1] as const) {
+    ctx.moveTo(sign * hw, FIN_INNER_TOP);
+    ctx.lineTo(sign * hw, FIN_INNER_BOTTOM);
+    ctx.lineTo(sign * (hw + FIN_OUTER_DX), FIN_OUTER_Y);
+    ctx.closePath();
+  }
+
+  ctx.rect(
+    -NOZZLE_FLANGE_W / 2,
+    NOZZLE_FLANGE_Y,
+    NOZZLE_FLANGE_W,
+    NOZZLE_FLANGE_H,
+  );
+
+  const bellTopY = NOZZLE_FLANGE_Y + NOZZLE_FLANGE_H;
+  const bellBotY = bellTopY + NOZZLE_BELL_H;
+  ctx.moveTo(-NOZZLE_BELL_TOP_W / 2, bellTopY);
+  ctx.lineTo(NOZZLE_BELL_TOP_W / 2, bellTopY);
+  ctx.lineTo(NOZZLE_BELL_BOT_W / 2, bellBotY);
+  ctx.lineTo(-NOZZLE_BELL_BOT_W / 2, bellBotY);
+  ctx.closePath();
+}
+
+function drawInvulnerableSheen(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  hw: number,
+  hh: number,
+) {
+  const pulse =
+    0.5 + 0.5 * Math.sin((performance.now() / INVULN_PULSE_PERIOD_MS) * Math.PI * 2);
+  const alpha = INVULN_ALPHA_MIN + (INVULN_ALPHA_MAX - INVULN_ALPHA_MIN) * pulse;
+
+  ctx.save();
+  buildShipSilhouette(ctx, hw, hh);
+  ctx.clip();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(-hw - 1, -hh - NOSE_LEN - 1, w + 2, h + NOSE_LEN + 2);
+  ctx.restore();
 }
 
 function drawDenyFlash(

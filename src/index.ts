@@ -136,6 +136,28 @@ const GAME_SIZE = 100;
 const GRID_SPACING = 10;
 const GRID_DOT_RADIUS = 0.4;
 
+const WIN_OVERLAY_FADE_MS = 400;
+const WIN_TITLE_START_MS = 120;
+const WIN_TITLE_DURATION_MS = 480;
+const WIN_STATS_START_MS = 460;
+const WIN_STATS_DURATION_MS = 340;
+const WIN_HINT_START_MS = 780;
+const WIN_HINT_DURATION_MS = 300;
+const WIN_INPUT_LOCKOUT_MS = 800;
+
+function smoothstep(x: number) {
+  const t = Math.max(0, Math.min(1, x));
+  return t * t * (3 - 2 * t);
+}
+
+function easeOutBack(x: number) {
+  const t = Math.max(0, Math.min(1, x));
+  const c1 = 1.70158;
+  const c3 = c1 + 1;
+  const u = t - 1;
+  return 1 + c3 * u * u * u + c1 * u * u;
+}
+
 const STATUS_CHIP_LABELS: Record<keyof Player.StatusEffects, string> = {
   thrustDisabled: "THRUST JAMMED",
   turnDisabled: "TURN JAMMED",
@@ -497,11 +519,18 @@ startLoop(canvas, (ctx, dt) => {
   }
   const won = state.level.dynamic.won;
   const wonAndPlayable = !state.edit.active && won;
+  const winElapsedMs =
+    won && state.level.dynamic.wonAtMs !== null
+      ? performance.now() - state.level.dynamic.wonAtMs
+      : 0;
+  const winInputLocked = wonAndPlayable && winElapsedMs < WIN_INPUT_LOCKOUT_MS;
   const anyInputPressed =
     Input.keysJustPressed.size > 0 || Input.mouse.justLeftClicked;
   const advancePressed =
     !inputLocked &&
-    (wonAndPlayable ? anyInputPressed : Input.keysJustPressed.has("e"));
+    (wonAndPlayable
+      ? anyInputPressed && !winInputLocked
+      : Input.keysJustPressed.has("e"));
   let advancedFromWin = false;
   if (advancePressed) {
     const onLast = state.currentLevelIndex === state.levels.length - 1;
@@ -742,8 +771,27 @@ startLoop(canvas, (ctx, dt) => {
     drawStatusHUD(ctx, rect, state.level.dynamic.statusEffects);
 
     if (state.level.dynamic.won) {
+      const elapsed =
+        state.level.dynamic.wonAtMs !== null
+          ? performance.now() - state.level.dynamic.wonAtMs
+          : 0;
+
+      const overlayP = smoothstep(elapsed / WIN_OVERLAY_FADE_MS);
+      const titleP = smoothstep(
+        (elapsed - WIN_TITLE_START_MS) / WIN_TITLE_DURATION_MS,
+      );
+      const titleScale = easeOutBack(
+        (elapsed - WIN_TITLE_START_MS) / WIN_TITLE_DURATION_MS,
+      );
+      const statsP = smoothstep(
+        (elapsed - WIN_STATS_START_MS) / WIN_STATS_DURATION_MS,
+      );
+      const hintP = smoothstep(
+        (elapsed - WIN_HINT_START_MS) / WIN_HINT_DURATION_MS,
+      );
+
       ctx.save();
-      ctx.fillStyle = "rgba(0,0,0,0.6)";
+      ctx.fillStyle = `rgba(0,0,0,${0.6 * overlayP})`;
       ctx.fillRect(0, 0, rect.width, rect.height);
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
@@ -754,31 +802,50 @@ startLoop(canvas, (ctx, dt) => {
       const cx = rect.width / 2;
       const cy = rect.height / 2;
 
-      ctx.font = "bold 48px monospace";
-      ctx.lineWidth = 6;
-      ctx.fillStyle = "#9cffcf";
-      const winAngle = Math.sin(performance.now() / 180) * 0.12;
-      ctx.save();
-      ctx.translate(cx, cy - 64);
-      ctx.rotate(winAngle);
-      ctx.strokeText("LEVEL COMPLETE", 0, 0);
-      ctx.fillText("LEVEL COMPLETE", 0, 0);
-      ctx.restore();
+      if (titleP > 0) {
+        const settle = Math.max(0, (elapsed - WIN_TITLE_START_MS - WIN_TITLE_DURATION_MS) / 250);
+        const rockAmp = smoothstep(settle) * 0.12;
+        const winAngle = Math.sin(performance.now() / 180) * rockAmp;
+        ctx.save();
+        ctx.globalAlpha = titleP;
+        ctx.translate(cx, cy - 64);
+        ctx.rotate(winAngle);
+        ctx.scale(titleScale, titleScale);
+        ctx.font = "bold 48px monospace";
+        ctx.lineWidth = 6;
+        ctx.fillStyle = "#9cffcf";
+        ctx.strokeText("LEVEL COMPLETE", 0, 0);
+        ctx.fillText("LEVEL COMPLETE", 0, 0);
+        ctx.restore();
+      }
 
-      ctx.font = "bold 20px monospace";
-      ctx.lineWidth = 5;
-      ctx.fillStyle = "#eaeaea";
-      const timeText = `TIME  ${formatTimeMs(state.level.stats.timeMs)}`;
-      ctx.strokeText(timeText, cx, cy - 10);
-      ctx.fillText(timeText, cx, cy - 10);
-      const resetText = `RESETS  ${state.level.stats.resets}`;
-      ctx.strokeText(resetText, cx, cy + 18);
-      ctx.fillText(resetText, cx, cy + 18);
+      if (statsP > 0) {
+        ctx.save();
+        ctx.globalAlpha = statsP;
+        const slide = (1 - statsP) * 12;
+        ctx.font = "bold 20px monospace";
+        ctx.lineWidth = 5;
+        ctx.fillStyle = "#eaeaea";
+        const timeText = `TIME  ${formatTimeMs(state.level.stats.timeMs)}`;
+        ctx.strokeText(timeText, cx, cy - 10 + slide);
+        ctx.fillText(timeText, cx, cy - 10 + slide);
+        const resetText = `RESETS  ${state.level.stats.resets}`;
+        ctx.strokeText(resetText, cx, cy + 18 + slide);
+        ctx.fillText(resetText, cx, cy + 18 + slide);
+        ctx.restore();
+      }
 
-      ctx.font = "bold 22px monospace";
-      ctx.fillStyle = "#cfe7ff";
-      ctx.strokeText("PRESS ANY KEY", cx, cy + 64);
-      ctx.fillText("PRESS ANY KEY", cx, cy + 64);
+      if (hintP > 0) {
+        const pulse = 0.65 + 0.35 * Math.sin(performance.now() / 280);
+        ctx.save();
+        ctx.globalAlpha = hintP * pulse;
+        ctx.font = "bold 22px monospace";
+        ctx.lineWidth = 5;
+        ctx.fillStyle = "#cfe7ff";
+        ctx.strokeText("PRESS ANY KEY", cx, cy + 64);
+        ctx.fillText("PRESS ANY KEY", cx, cy + 64);
+        ctx.restore();
+      }
       ctx.restore();
     } else if (!state.player.alive) {
       ctx.save();
