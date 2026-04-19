@@ -12,7 +12,7 @@ type Particle = {
 };
 
 export function create(capacity = 1024) {
-  const particles: Particle[] = new Array(capacity);
+  const particles: Particle[] = Array.from({ length: capacity });
   for (let i = 0; i < capacity; i++) {
     particles[i] = {
       x: 0,

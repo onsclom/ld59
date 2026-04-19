@@ -122,6 +122,10 @@ let wasThrustInhibit = false;
 let wasTurnInhibit = false;
 let wasControlReverse = false;
 
+let nodeHudPunch = 0;
+const NODE_HUD_PUNCH_AMP = 0.3;
+const NODE_HUD_PUNCH_DECAY_PER_MS = 0.005;
+
 const GAME_SIZE = 100;
 const GRID_SPACING = 10;
 const GRID_DOT_RADIUS = 0.4;
@@ -412,6 +416,7 @@ startLoop(canvas, (ctx, dt) => {
       const newlyCompleted =
         state.level.dynamic.completedNodes.size - prevCompleted;
       for (let i = 0; i < newlyCompleted; i++) Sound.sfx.nodeComplete();
+      if (newlyCompleted > 0) nodeHudPunch = 1;
       if (!prevWon && state.level.dynamic.won) Sound.sfx.levelWon();
       if (wasAlive && !state.player.alive) {
         state.camera.shakeFactor = 3;
@@ -535,9 +540,13 @@ startLoop(canvas, (ctx, dt) => {
       ctx.strokeStyle = "rgba(0,0,0,0.85)";
       ctx.fillStyle = "#9cffcf";
       const nodeText = `TRANSMISSION NODES  ${total - remaining} / ${total}`;
-      ctx.strokeText(nodeText, rect.width / 2, 16);
-      ctx.fillText(nodeText, rect.width / 2, 16);
+      const punchScale = 1 + nodeHudPunch * NODE_HUD_PUNCH_AMP;
+      ctx.translate(rect.width / 2, 16);
+      ctx.scale(punchScale, punchScale);
+      ctx.strokeText(nodeText, 0, 0);
+      ctx.fillText(nodeText, 0, 0);
       ctx.restore();
+      nodeHudPunch *= Math.exp(-NODE_HUD_PUNCH_DECAY_PER_MS * dt);
     }
 
     drawStatusHUD(ctx, rect, state.level.dynamic.statusEffects);
