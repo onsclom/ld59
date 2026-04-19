@@ -27,7 +27,7 @@ function createInitState() {
     edit: Edit.create(),
     transition: Transitions.create(),
     gameStartedAt: performance.now(),
-    phase: "title" as "title" | "playing" | "end",
+    phase: "title" as "title" | "intro" | "playing" | "end",
   };
 }
 const state = createInitState();
@@ -159,6 +159,93 @@ const titlePlayer = Player.create();
 titlePlayer.thrusting = true;
 titlePlayer.hasThrusted = true;
 const titleEffects = Player.createEffects();
+
+const INTRO_MESSAGES = [
+  "YOU ARE THE TRANSMITTER",
+  "YOUR TASK IS TO COLLECT SIGNALS FROM TRANSMISSION NODES",
+  "THESE SIGNALS SAVE WILL SAVE EARTH FROM IMPENDING DOOM",
+  "WASD OR ARROW KEYS TO FLY YOUR SHIP",
+];
+const INTRO_CHAR_INTERVAL_MS = 35;
+
+const intro = {
+  index: 0,
+  charsRevealed: 0,
+  charTimer: 0,
+};
+
+function resetIntro() {
+  intro.index = 0;
+  intro.charsRevealed = 0;
+  intro.charTimer = 0;
+}
+
+function wrapText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+): string[] {
+  const words = text.split(" ");
+  const lines: string[] = [];
+  let line = "";
+  for (const w of words) {
+    const tryLine = line ? `${line} ${w}` : w;
+    if (ctx.measureText(tryLine).width > maxWidth && line) {
+      lines.push(line);
+      line = w;
+    } else {
+      line = tryLine;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+function drawIntroScreen(ctx: CanvasRenderingContext2D, rect: DOMRect) {
+  const message = INTRO_MESSAGES[intro.index] ?? "";
+  const visible = message.slice(0, intro.charsRevealed);
+  const fullyRevealed = intro.charsRevealed >= message.length;
+
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.lineJoin = "round";
+  ctx.miterLimit = 2;
+  ctx.strokeStyle = "rgba(0,0,0,0.9)";
+
+  const cx = rect.width / 2;
+  const cy = rect.height / 2;
+  const fontSize = Math.max(18, Math.min(36, Math.floor(rect.width / 28)));
+  ctx.font = `bold ${fontSize}px monospace`;
+  ctx.lineWidth = Math.max(4, Math.floor(fontSize / 6));
+  ctx.fillStyle = "#9cffcf";
+
+  const maxWidth = rect.width * 0.8;
+  const lines = wrapText(ctx, visible, maxWidth);
+  const lineHeight = fontSize * 1.35;
+  const totalH = lineHeight * lines.length;
+  const startY = cy - totalH / 2 + lineHeight / 2;
+  for (let i = 0; i < lines.length; i++) {
+    const y = startY + i * lineHeight;
+    ctx.strokeText(lines[i]!, cx, y);
+    ctx.fillText(lines[i]!, cx, y);
+  }
+
+  if (fullyRevealed) {
+    const pulse = 0.55 + 0.45 * Math.sin(performance.now() / 280);
+    ctx.globalAlpha = pulse;
+    const hintSize = Math.max(14, Math.floor(fontSize * 0.6));
+    ctx.font = `bold ${hintSize}px monospace`;
+    ctx.lineWidth = Math.max(3, Math.floor(hintSize / 5));
+    ctx.fillStyle = "#cfe7ff";
+    const isLast = intro.index >= INTRO_MESSAGES.length - 1;
+    const hint = isLast ? "PRESS ANY KEY TO BEGIN" : "PRESS ANY KEY";
+    const hintY = startY + totalH + lineHeight;
+    ctx.strokeText(hint, cx, hintY);
+    ctx.fillText(hint, cx, hintY);
+  }
+  ctx.restore();
+}
 
 function drawTitleScreen(ctx: CanvasRenderingContext2D, rect: DOMRect) {
   const t = performance.now();
@@ -325,8 +412,51 @@ startLoop(canvas, (ctx, dt) => {
     ) {
       Transitions.begin(state.transition, { kind: "startGame" });
       state.gameStartedAt = performance.now();
+      resetIntro();
       Sound.sfx.advance();
     }
+    Input.resetInput();
+    return;
+  }
+
+  if (state.phase === "intro") {
+    Transitions.update(state.transition, state, dt);
+    const message = INTRO_MESSAGES[intro.index] ?? "";
+    const fullyRevealed = intro.charsRevealed >= message.length;
+    if (!Transitions.isLocked(state.transition) && !fullyRevealed) {
+      intro.charTimer += dt;
+      while (
+        intro.charTimer >= INTRO_CHAR_INTERVAL_MS &&
+        intro.charsRevealed < message.length
+      ) {
+        intro.charTimer -= INTRO_CHAR_INTERVAL_MS;
+        const ch = message.charAt(intro.charsRevealed);
+        intro.charsRevealed += 1;
+        if (ch !== " ") Sound.sfx.typeChar();
+      }
+    }
+    const advancePressed =
+      !Transitions.isLocked(state.transition) &&
+      (Input.keysJustPressed.size > 0 || Input.mouse.justLeftClicked);
+    if (advancePressed) {
+      if (!fullyRevealed) {
+        intro.charsRevealed = message.length;
+        intro.charTimer = 0;
+      } else if (intro.index < INTRO_MESSAGES.length - 1) {
+        intro.index += 1;
+        intro.charsRevealed = 0;
+        intro.charTimer = 0;
+        Sound.sfx.select();
+      } else {
+        Transitions.begin(state.transition, { kind: "startPlaying" });
+        state.gameStartedAt = performance.now();
+        Sound.sfx.advance();
+      }
+    }
+    ctx.fillStyle = "#111";
+    ctx.fillRect(0, 0, rect.width, rect.height);
+    drawIntroScreen(ctx, rect);
+    Transitions.drawOverlay(ctx, state.transition, rect.width, rect.height);
     Input.resetInput();
     return;
   }

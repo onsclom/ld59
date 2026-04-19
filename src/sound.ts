@@ -369,4 +369,11 @@ export const sfx = {
     playBlip(520, 1040, 0.12, "triangle", 0.22);
     setTimeout(() => playTone(1320, 0.1, "sine", 0.18), 70);
   },
+  typeChar: () => {
+    const cutoff = 2400 + Math.random() * 1600;
+    const noiseDur = 0.018 + Math.random() * 0.012;
+    playNoise(noiseDur, cutoff, 0.07 + Math.random() * 0.04);
+    const freq = 720 + Math.random() * 360;
+    // playTone(freq, 0.012 + Math.random() * 0.01, "sine", 0.04);
+  },
 };

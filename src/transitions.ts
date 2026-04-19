@@ -6,7 +6,8 @@ import * as Player from "./player";
 export type TransitionAction =
   | { kind: "restart" }
   | { kind: "switchLevel"; dir: number }
-  | { kind: "startGame" };
+  | { kind: "startGame" }
+  | { kind: "startPlaying" };
 
 export type Transition = {
   phase: "idle" | "out" | "in";
@@ -23,7 +24,7 @@ type WorldState = {
   levels: ReturnType<typeof Level.create>[];
   currentLevelIndex: number;
   particles: ReturnType<typeof Particles.create>;
-  phase: "title" | "playing" | "end";
+  phase: "title" | "intro" | "playing" | "end";
 };
 
 const DEFAULT_OUT_MS = 200;
@@ -141,7 +142,7 @@ export function apply(state: WorldState, action: TransitionAction): void {
       return;
     }
     case "startGame": {
-      state.phase = "playing";
+      state.phase = "intro";
       state.currentLevelIndex = 0;
       state.level = state.levels[0]!;
       Player.reset(state.player);
@@ -151,6 +152,10 @@ export function apply(state: WorldState, action: TransitionAction): void {
         l.stats.timeMs = 0;
       }
       Particles.clear(state.particles);
+      return;
+    }
+    case "startPlaying": {
+      state.phase = "playing";
       return;
     }
   }
