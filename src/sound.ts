@@ -362,4 +362,11 @@ export const sfx = {
     playNoise(0.35, 900, 0.4);
     playBlip(160, 45, 0.35, "sawtooth", 0.22);
   },
+  retry: () => {
+    playBlip(520, 220, 0.14, "square", 0.18);
+  },
+  advance: () => {
+    playBlip(520, 1040, 0.12, "triangle", 0.22);
+    setTimeout(() => playTone(1320, 0.1, "sine", 0.18), 70);
+  },
 };

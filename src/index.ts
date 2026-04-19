@@ -27,6 +27,7 @@ function createInitState() {
     edit: Edit.create(),
     transition: Transitions.create(),
     gameStartedAt: performance.now(),
+    phase: "title" as "title" | "playing" | "end",
   };
 }
 const state = createInitState();
@@ -108,6 +109,11 @@ document.addEventListener("keydown", (e) => {
     e.preventDefault();
     saveLevels();
   }
+  if (!e.metaKey && !e.ctrlKey && !e.altKey && e.key === "f") {
+    e.preventDefault();
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen().catch(() => {});
+  }
 });
 
 let wasThrusting = false;
@@ -143,6 +149,105 @@ function formatTimeMs(ms: number): string {
   const m = Math.floor(total / 60);
   const s = total - m * 60;
   return `${m}:${s.toFixed(2).padStart(5, "0")}`;
+}
+
+const titlePlayer = Player.create();
+titlePlayer.thrusting = true;
+titlePlayer.hasThrusted = true;
+const titleEffects = Player.createEffects();
+
+function drawTitleScreen(ctx: CanvasRenderingContext2D, rect: DOMRect) {
+  const t = performance.now();
+  titlePlayer.rotation = Math.sin(t / 1800) * 0.22;
+  const bobX = Math.sin(t / 1400) * 0.5;
+  const bobY = Math.sin(t / 900) * 0.7;
+
+  const cx = rect.width / 2;
+  const cy = rect.height / 2;
+  const rocketScale = Math.min(rect.width, rect.height) / 9;
+
+  ctx.save();
+  ctx.translate(cx + bobX * rocketScale, cy + 10 + bobY * rocketScale);
+  ctx.scale(rocketScale, rocketScale);
+  Player.draw(titlePlayer, ctx, titleEffects);
+  ctx.restore();
+
+  ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
+  ctx.fillRect(0, 0, rect.width, rect.height);
+
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.lineJoin = "round";
+  ctx.miterLimit = 2;
+  ctx.strokeStyle = "rgba(0,0,0,0.9)";
+
+  ctx.font = "bold 72px monospace";
+  ctx.lineWidth = 8;
+  ctx.fillStyle = "#9cffcf";
+  const angle = Math.sin(performance.now() / 220) * 0.08;
+  ctx.save();
+  ctx.translate(cx, cy - 40);
+  ctx.rotate(angle);
+  ctx.strokeText("THE TRANSMITTER", 0, 0);
+  ctx.fillText("THE TRANSMITTER", 0, 0);
+  ctx.restore();
+
+  const pulse = 0.6 + 0.4 * Math.sin(performance.now() / 300);
+  ctx.globalAlpha = pulse;
+  ctx.font = "bold 22px monospace";
+  ctx.lineWidth = 5;
+  ctx.fillStyle = "#cfe7ff";
+  ctx.strokeText("PRESS ANY KEY TO START", cx, cy + 60);
+  ctx.fillText("PRESS ANY KEY TO START", cx, cy + 60);
+  ctx.restore();
+}
+
+function drawEndScreen(
+  ctx: CanvasRenderingContext2D,
+  rect: DOMRect,
+  s: typeof state,
+) {
+  const totalTime = s.levels.reduce((acc, l) => acc + l.stats.timeMs, 0);
+  const totalResets = s.levels.reduce((acc, l) => acc + l.stats.resets, 0);
+
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.lineJoin = "round";
+  ctx.miterLimit = 2;
+  ctx.strokeStyle = "rgba(0,0,0,0.9)";
+
+  const cx = rect.width / 2;
+  const cy = rect.height / 2;
+
+  ctx.font = "bold 64px monospace";
+  ctx.lineWidth = 7;
+  ctx.fillStyle = "#9cffcf";
+  const angle = Math.sin(performance.now() / 180) * 0.1;
+  ctx.save();
+  ctx.translate(cx, cy - 80);
+  ctx.rotate(angle);
+  ctx.strokeText("THE END", 0, 0);
+  ctx.fillText("THE END", 0, 0);
+  ctx.restore();
+
+  ctx.font = "bold 20px monospace";
+  ctx.lineWidth = 5;
+  ctx.fillStyle = "#eaeaea";
+  const timeText = `TOTAL TIME    ${formatTimeMs(totalTime)}`;
+  const resetText = `TOTAL RESETS  ${totalResets}`;
+  ctx.strokeText(timeText, cx, cy - 20);
+  ctx.fillText(timeText, cx, cy - 20);
+  ctx.strokeText(resetText, cx, cy + 8);
+  ctx.fillText(resetText, cx, cy + 8);
+
+  ctx.font = "bold 24px monospace";
+  ctx.lineWidth = 5;
+  ctx.fillStyle = "#ffd89c";
+  ctx.strokeText("THANKS FOR PLAYING!", cx, cy + 56);
+  ctx.fillText("THANKS FOR PLAYING!", cx, cy + 56);
+  ctx.restore();
 }
 
 function drawStatusHUD(
@@ -204,6 +309,34 @@ startLoop(canvas, (ctx, dt) => {
   const rect = ctx.canvas.getBoundingClientRect();
   state.camera.zoom = Camera.aspectFitZoom(rect, GAME_SIZE, GAME_SIZE);
 
+  if (state.phase === "title") {
+    Transitions.update(state.transition, state, dt);
+    ctx.fillStyle = "#111";
+    ctx.fillRect(0, 0, rect.width, rect.height);
+    drawTitleScreen(ctx, rect);
+    Transitions.drawOverlay(ctx, state.transition, rect.width, rect.height);
+    if (
+      !Transitions.isLocked(state.transition) &&
+      (Input.keysJustPressed.size > 0 || Input.mouse.justLeftClicked)
+    ) {
+      Transitions.begin(state.transition, { kind: "startGame" });
+      state.gameStartedAt = performance.now();
+      Sound.sfx.advance();
+    }
+    Input.resetInput();
+    return;
+  }
+
+  if (state.phase === "end") {
+    Transitions.update(state.transition, state, dt);
+    ctx.fillStyle = "#111";
+    ctx.fillRect(0, 0, rect.width, rect.height);
+    drawEndScreen(ctx, rect, state);
+    Transitions.drawOverlay(ctx, state.transition, rect.width, rect.height);
+    Input.resetInput();
+    return;
+  }
+
   if (Input.keysJustPressed.has("Shift")) {
     state.edit.active = !state.edit.active;
     if (state.edit.active) {
@@ -221,9 +354,16 @@ startLoop(canvas, (ctx, dt) => {
     else Transitions.begin(state.transition, action);
   }
   if (!transitionLocked && Input.keysJustPressed.has("e")) {
-    const action = { kind: "switchLevel" as const, dir: 1 };
-    if (state.edit.active) Transitions.apply(state, action);
-    else Transitions.begin(state.transition, action);
+    const onLast = state.currentLevelIndex === state.levels.length - 1;
+    if (!state.edit.active && state.level.dynamic.won && onLast) {
+      state.phase = "end";
+      Sound.sfx.advance();
+    } else {
+      const action = { kind: "switchLevel" as const, dir: 1 };
+      if (state.edit.active) Transitions.apply(state, action);
+      else Transitions.begin(state.transition, action);
+      Sound.sfx.advance();
+    }
   }
 
   if (state.edit.active) {
@@ -238,6 +378,7 @@ startLoop(canvas, (ctx, dt) => {
     const action = { kind: "restart" as const };
     if (wasEdit) Transitions.apply(state, action);
     else Transitions.begin(state.transition, action);
+    Sound.sfx.retry();
   }
 
   Transitions.update(state.transition, state, dt);
@@ -417,8 +558,13 @@ startLoop(canvas, (ctx, dt) => {
       ctx.font = "bold 48px monospace";
       ctx.lineWidth = 6;
       ctx.fillStyle = "#9cffcf";
-      ctx.strokeText("LEVEL COMPLETE", cx, cy - 64);
-      ctx.fillText("LEVEL COMPLETE", cx, cy - 64);
+      const winAngle = Math.sin(performance.now() / 180) * 0.12;
+      ctx.save();
+      ctx.translate(cx, cy - 64);
+      ctx.rotate(winAngle);
+      ctx.strokeText("LEVEL COMPLETE", 0, 0);
+      ctx.fillText("LEVEL COMPLETE", 0, 0);
+      ctx.restore();
 
       ctx.font = "bold 20px monospace";
       ctx.lineWidth = 5;
@@ -432,8 +578,8 @@ startLoop(canvas, (ctx, dt) => {
 
       ctx.font = "bold 22px monospace";
       ctx.fillStyle = "#cfe7ff";
-      ctx.strokeText("E FOR NEXT LEVEL", cx, cy + 64);
-      ctx.fillText("E FOR NEXT LEVEL", cx, cy + 64);
+      ctx.strokeText("E TO CONTINUE", cx, cy + 64);
+      ctx.fillText("E TO CONTINUE", cx, cy + 64);
       ctx.restore();
     } else if (!state.player.alive) {
       ctx.save();
@@ -451,8 +597,13 @@ startLoop(canvas, (ctx, dt) => {
       ctx.font = "bold 48px monospace";
       ctx.lineWidth = 6;
       ctx.fillStyle = "#ff6666";
-      ctx.strokeText("DEAD", cx, cy - 32);
-      ctx.fillText("DEAD", cx, cy - 32);
+      const deadAngle = Math.sin(performance.now() / 180) * 0.12;
+      ctx.save();
+      ctx.translate(cx, cy - 32);
+      ctx.rotate(deadAngle);
+      ctx.strokeText("DEAD", 0, 0);
+      ctx.fillText("DEAD", 0, 0);
+      ctx.restore();
 
       ctx.font = "bold 24px monospace";
       ctx.lineWidth = 5;

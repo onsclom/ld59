@@ -581,27 +581,57 @@ export function drawProjectiles(level: Level, ctx: CanvasRenderingContext2D) {
 const CHECKER_CELL = 5;
 const CHECKER_PX_PER_UNIT = 16;
 const CHECKER_PARALLAX = 0.4;
-const CHECKER_DARK = "#0c0c10";
-const CHECKER_LIGHT = "#16161c";
-// const CHECKER_DARK = "#9e9e9e";
-// const CHECKER_LIGHT = "#bdbdbd";
+const CHECKER_DARK = "#0a0a0a";
+const CHECKER_LIGHT = "#0e0e0e";
+
+const CHECKER_TILE_CELLS = 8;
+const CHECKER_TICK_COLOR = "rgba(100, 100, 100, 0.22)";
 
 let checkerPattern: CanvasPattern | null = null;
 function getCheckerPattern(
   ctx: CanvasRenderingContext2D,
 ): CanvasPattern | null {
   if (checkerPattern) return checkerPattern;
-  const tile = document.createElement("canvas");
   const cellPx = CHECKER_CELL * CHECKER_PX_PER_UNIT;
-  tile.width = cellPx * 2;
-  tile.height = cellPx * 2;
+  const tilePx = cellPx * CHECKER_TILE_CELLS;
+  const tile = document.createElement("canvas");
+  tile.width = tilePx;
+  tile.height = tilePx;
   const tctx = tile.getContext("2d");
   if (!tctx) return null;
+
   tctx.fillStyle = CHECKER_LIGHT;
-  tctx.fillRect(0, 0, cellPx * 2, cellPx * 2);
+  tctx.fillRect(0, 0, tilePx, tilePx);
   tctx.fillStyle = CHECKER_DARK;
-  tctx.fillRect(0, 0, cellPx, cellPx);
-  tctx.fillRect(cellPx, cellPx, cellPx, cellPx);
+  for (let i = 0; i < CHECKER_TILE_CELLS; i++) {
+    for (let j = 0; j < CHECKER_TILE_CELLS; j++) {
+      if ((i + j) % 2 === 0)
+        tctx.fillRect(i * cellPx, j * cellPx, cellPx, cellPx);
+    }
+  }
+
+  const tickLen = 7;
+  const tickGap = 3;
+  tctx.strokeStyle = CHECKER_TICK_COLOR;
+  tctx.lineWidth = 1;
+  tctx.lineCap = "butt";
+  tctx.beginPath();
+  for (let i = 0; i <= CHECKER_TILE_CELLS; i++) {
+    for (let j = 0; j <= CHECKER_TILE_CELLS; j++) {
+      const px = i * cellPx;
+      const py = j * cellPx;
+      tctx.moveTo(px, py - tickGap - tickLen);
+      tctx.lineTo(px, py - tickGap);
+      tctx.moveTo(px, py + tickGap);
+      tctx.lineTo(px, py + tickGap + tickLen);
+      tctx.moveTo(px - tickGap - tickLen, py);
+      tctx.lineTo(px - tickGap, py);
+      tctx.moveTo(px + tickGap, py);
+      tctx.lineTo(px + tickGap + tickLen, py);
+    }
+  }
+  tctx.stroke();
+
   const pat = ctx.createPattern(tile, "repeat");
   if (!pat) return null;
   checkerPattern = pat;
