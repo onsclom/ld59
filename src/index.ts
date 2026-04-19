@@ -192,7 +192,7 @@ const INTRO_MESSAGES = [
   "YOU ARE THE TRANSMITTER",
   "YOUR TASK IS TO COLLECT SIGNALS FROM TRANSMISSION NODES",
   "THESE SIGNALS WILL SAVE EARTH FROM IMPENDING DOOM",
-  "WASD OR ARROW KEYS TO FLY YOUR SHIP",
+  "WASD OR ARROW KEYS TO FLY",
 ];
 const INTRO_CHAR_INTERVAL_MS = 35;
 
@@ -672,9 +672,7 @@ startLoop(canvas, (ctx, dt) => {
       }
     }
 
-    const bgAlpha = introActiveNow
-      ? LevelIntro.bgAlpha(state.levelIntro)
-      : 1;
+    const bgAlpha = introActiveNow ? LevelIntro.bgAlpha(state.levelIntro) : 1;
     if (!state.edit.active) {
       Level.fillInside(
         state.level,
@@ -803,7 +801,10 @@ startLoop(canvas, (ctx, dt) => {
       const cy = rect.height / 2;
 
       if (titleP > 0) {
-        const settle = Math.max(0, (elapsed - WIN_TITLE_START_MS - WIN_TITLE_DURATION_MS) / 250);
+        const settle = Math.max(
+          0,
+          (elapsed - WIN_TITLE_START_MS - WIN_TITLE_DURATION_MS) / 250,
+        );
         const rockAmp = smoothstep(settle) * 0.12;
         const winAngle = Math.sin(performance.now() / 180) * rockAmp;
         ctx.save();
