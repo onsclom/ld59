@@ -104,7 +104,8 @@ export function draw(
   }
   if (sat.type === "transmission-node") drawTransmissionNode(ctx);
   else if (sat.type === "cannon") drawCannon(ctx, aim, charge);
-  else if (sat.type === "missile-launcher") drawMissileLauncher(ctx, aim, charge);
+  else if (sat.type === "missile-launcher")
+    drawMissileLauncher(ctx, aim, charge);
   else drawStandard(ctx, TYPE_COLORS[sat.type]);
   ctx.restore();
 }
@@ -115,7 +116,12 @@ function drawChassis(
   withAntenna: boolean,
 ) {
   ctx.fillStyle = COLOR_ARM;
-  ctx.fillRect(-BODY_W / 2 - ARM_LEN, -ARM_THICKNESS / 2, ARM_LEN, ARM_THICKNESS);
+  ctx.fillRect(
+    -BODY_W / 2 - ARM_LEN,
+    -ARM_THICKNESS / 2,
+    ARM_LEN,
+    ARM_THICKNESS,
+  );
   ctx.fillRect(BODY_W / 2, -ARM_THICKNESS / 2, ARM_LEN, ARM_THICKNESS);
 
   for (const side of [-1, 1] as const) {
@@ -135,9 +141,20 @@ function drawChassis(
   );
   if (withAntenna) {
     ctx.fillStyle = COLOR_ANTENNA;
-    ctx.fillRect(-ARM_THICKNESS / 2, -BODY_H / 2 - ANTENNA_H, ARM_THICKNESS, ANTENNA_H);
+    ctx.fillRect(
+      -ARM_THICKNESS / 2,
+      -BODY_H / 2 - ANTENNA_H,
+      ARM_THICKNESS,
+      ANTENNA_H,
+    );
     ctx.beginPath();
-    ctx.arc(0, -BODY_H / 2 - ANTENNA_H - ANTENNA_DISH_R * 0.6, ANTENNA_DISH_R, 0, Math.PI * 2);
+    ctx.arc(
+      0,
+      -BODY_H / 2 - ANTENNA_H - ANTENNA_DISH_R * 0.6,
+      ANTENNA_DISH_R,
+      0,
+      Math.PI * 2,
+    );
     ctx.fill();
   }
 }
@@ -204,7 +221,12 @@ function drawCannon(
   ctx.fillStyle = "#3a3a3a";
   ctx.fillRect(barrelStart, -barrelW / 2, barrelL, 0.08);
   ctx.fillStyle = "#2a2a2a";
-  ctx.fillRect(barrelStart + barrelL - 0.25, -barrelW / 2 - 0.1, 0.25, barrelW + 0.2);
+  ctx.fillRect(
+    barrelStart + barrelL - 0.25,
+    -barrelW / 2 - 0.1,
+    0.25,
+    barrelW + 0.2,
+  );
 
   const muzzleX = barrelStart + barrelL;
   const muzzleGlowR = 0.45 + 0.35 * charge;
@@ -316,7 +338,7 @@ function drawMissileLauncher(
     ctx.fillStyle = "#323232";
     ctx.fillRect(tubeStart, offset - tubeW / 2, tubeL, tubeW);
     ctx.strokeStyle = "#5a5a5a";
-    ctx.lineWidth = 0.05;
+    ctx.lineWidth = 0.5;
     ctx.strokeRect(tubeStart, offset - tubeW / 2, tubeL, tubeW);
 
     ctx.fillStyle = "#1d1d1d";
@@ -335,9 +357,7 @@ function drawMissileLauncher(
     const tipX = tubeStart + tubeL;
     const tipLen = 0.5;
     const hot = charge > 0.3;
-    ctx.fillStyle = hot
-      ? `rgba(255, ${140 + charge * 70}, 60, 1)`
-      : "#bfbfbf";
+    ctx.fillStyle = hot ? `rgba(255, ${140 + charge * 70}, 60, 1)` : "#bfbfbf";
     ctx.beginPath();
     ctx.moveTo(tipX, offset - tubeW / 2 + 0.06);
     ctx.lineTo(tipX + tipLen, offset);
@@ -420,7 +440,13 @@ function drawTransmissionNode(ctx: CanvasRenderingContext2D) {
     ctx.stroke();
     ctx.fillStyle = COLOR_TX_GLOW;
     ctx.beginPath();
-    ctx.arc(Math.cos(segStart) * TX_RING_R, Math.sin(segStart) * TX_RING_R, 0.1, 0, Math.PI * 2);
+    ctx.arc(
+      Math.cos(segStart) * TX_RING_R,
+      Math.sin(segStart) * TX_RING_R,
+      0.1,
+      0,
+      Math.PI * 2,
+    );
     ctx.fill();
   }
 

@@ -36,16 +36,23 @@ const THRUST = 0.00005;
 const GRAVITY = 0.00002;
 const DRAG = 0.0003;
 
-const THRUST_EMIT_INTERVAL = 10;
+const THRUST_EMIT_INTERVAL = 8;
 const SMOKE_TAIL_OFFSET = 0.7;
-const SMOKE_NOZZLE_JITTER = 0.5;
+const SMOKE_NOZZLE_JITTER = 0.55;
 const SMOKE_SPREAD_ANGLE = Math.PI * 2;
 const SMOKE_SPEED_MIN = 0.0;
 const SMOKE_SPEED_MAX = 0.003;
-const SMOKE_LIFE_MIN = 1000;
-const SMOKE_LIFE_MAX = 2000;
-const SMOKE_SIZE_MIN = 0.5;
-const SMOKE_SIZE_MAX = 1;
+const SMOKE_LIFE_MIN = 900;
+const SMOKE_LIFE_MAX = 1700;
+const SMOKE_SIZE_MIN = 0.7;
+const SMOKE_SIZE_MAX = 1.0;
+const EMBER_SPREAD_ANGLE = 0.35;
+const EMBER_SPEED_MIN = 0.012;
+const EMBER_SPEED_MAX = 0.022;
+const EMBER_LIFE_MIN = 320;
+const EMBER_LIFE_MAX = 320;
+const EMBER_SIZE_MIN = 0.25;
+const EMBER_SIZE_MAX = 0.5;
 
 const NOSE_LEN = 1.1;
 const COLLAR_H = 0.14;
@@ -236,14 +243,17 @@ export function update(
     const tailDist = player.height / 2 + SMOKE_TAIL_OFFSET;
     const tailX = player.x - sinR * tailDist;
     const tailY = player.y + cosR * tailDist;
+    const inheritVx = player.vx * 0.5;
+    const inheritVy = player.vy * 0.5;
     while (player.thrustEmitAccum >= THRUST_EMIT_INTERVAL) {
       player.thrustEmitAccum -= THRUST_EMIT_INTERVAL;
+
       const nozzleOffset = (Math.random() - 0.5) * SMOKE_NOZZLE_JITTER;
       const spreadAngle = (Math.random() - 0.5) * SMOKE_SPREAD_ANGLE;
       const speed = randRange(SMOKE_SPEED_MIN, SMOKE_SPEED_MAX);
       const dirX = -Math.sin(player.rotation + spreadAngle);
       const dirY = Math.cos(player.rotation + spreadAngle);
-      const shade = 200;
+      const shade = 180 + Math.floor(Math.random() * 60);
       Particles.emit(particles, {
         x: tailX + cosR * nozzleOffset,
         y: tailY + sinR * nozzleOffset,
@@ -255,6 +265,26 @@ export function update(
         g: shade,
         b: shade,
       });
+
+      if (Math.random() < 0.5) {
+        const emberSpread = (Math.random() - 0.5) * EMBER_SPREAD_ANGLE;
+        const emberOffset = (Math.random() - 0.5) * SMOKE_NOZZLE_JITTER * 0.6;
+        const emberSpeed = randRange(EMBER_SPEED_MIN, EMBER_SPEED_MAX);
+        const eDirX = -Math.sin(player.rotation + emberSpread);
+        const eDirY = Math.cos(player.rotation + emberSpread);
+        const heat = Math.random();
+        Particles.emit(particles, {
+          x: tailX + cosR * emberOffset,
+          y: tailY + sinR * emberOffset,
+          vx: eDirX * emberSpeed + inheritVx,
+          vy: eDirY * emberSpeed + inheritVy,
+          life: randRange(EMBER_LIFE_MIN, EMBER_LIFE_MAX),
+          size: randRange(EMBER_SIZE_MIN, EMBER_SIZE_MAX),
+          r: 255,
+          g: 160 + Math.floor(heat * 80),
+          b: 40 + Math.floor(heat * 60),
+        });
+      }
     }
   } else {
     player.thrustEmitAccum = 0;
@@ -438,7 +468,13 @@ function drawWindow(ctx: CanvasRenderingContext2D) {
 
   ctx.fillStyle = COLOR_WINDOW_HIGHLIGHT;
   ctx.beginPath();
-  ctx.arc(-0.08, WINDOW_CY - 0.08, (WINDOW_R - 0.08) * 0.55, Math.PI, Math.PI * 1.7);
+  ctx.arc(
+    -0.08,
+    WINDOW_CY - 0.08,
+    (WINDOW_R - 0.08) * 0.55,
+    Math.PI,
+    Math.PI * 1.7,
+  );
   ctx.lineTo(-0.08, WINDOW_CY - 0.08);
   ctx.closePath();
   ctx.fill();
@@ -451,7 +487,8 @@ function drawWindow(ctx: CanvasRenderingContext2D) {
 
   ctx.fillStyle = COLOR_RIVET;
   for (let i = 0; i < WINDOW_RIVET_COUNT; i++) {
-    const a = (i / WINDOW_RIVET_COUNT) * Math.PI * 2 + Math.PI / WINDOW_RIVET_COUNT;
+    const a =
+      (i / WINDOW_RIVET_COUNT) * Math.PI * 2 + Math.PI / WINDOW_RIVET_COUNT;
     const x = Math.cos(a) * (WINDOW_R + 0.05);
     const y = WINDOW_CY + Math.sin(a) * (WINDOW_R + 0.05);
     ctx.beginPath();
@@ -546,7 +583,12 @@ function drawFins(ctx: CanvasRenderingContext2D, hw: number) {
 
 function drawNozzle(ctx: CanvasRenderingContext2D, thrusting: boolean) {
   ctx.fillStyle = COLOR_NOZZLE_FLANGE;
-  ctx.fillRect(-NOZZLE_FLANGE_W / 2, NOZZLE_FLANGE_Y, NOZZLE_FLANGE_W, NOZZLE_FLANGE_H);
+  ctx.fillRect(
+    -NOZZLE_FLANGE_W / 2,
+    NOZZLE_FLANGE_Y,
+    NOZZLE_FLANGE_W,
+    NOZZLE_FLANGE_H,
+  );
   ctx.fillStyle = COLOR_NOZZLE_FLANGE_EDGE;
   ctx.fillRect(-NOZZLE_FLANGE_W / 2, NOZZLE_FLANGE_Y, NOZZLE_FLANGE_W, 0.04);
   ctx.fillRect(

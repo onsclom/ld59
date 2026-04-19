@@ -517,9 +517,7 @@ function projectileShapeHitsWalls(level: Level, p: Projectile.Projectile) {
   const hw = Projectile.MISSILE_HITBOX_LEN / 2;
   const hh = Projectile.MISSILE_HITBOX_W / 2;
   for (const w of level.walls) {
-    if (
-      segmentIntersectsObb(w.x1, w.y1, w.x2, w.y2, p.x, p.y, p.angle, hw, hh)
-    )
+    if (segmentIntersectsObb(w.x1, w.y1, w.x2, w.y2, p.x, p.y, p.angle, hw, hh))
       return true;
   }
   return false;
@@ -610,6 +608,73 @@ function getCheckerPattern(
   return pat;
 }
 
+const NOISE_TILE_PX = 192;
+const NOISE_PX_PER_UNIT = 14;
+const NOISE_PARALLAX = 1;
+const NOISE_BASE: [number, number, number] = [20, 20, 20];
+
+let noisePattern: CanvasPattern | null = null;
+function getNoisePattern(ctx: CanvasRenderingContext2D): CanvasPattern | null {
+  if (noisePattern) return noisePattern;
+  const tile = document.createElement("canvas");
+  tile.width = NOISE_TILE_PX;
+  tile.height = NOISE_TILE_PX;
+  const tctx = tile.getContext("2d");
+  if (!tctx) return null;
+  const img = tctx.createImageData(NOISE_TILE_PX, NOISE_TILE_PX);
+  const data = img.data;
+  // LCG for stable per-session noise without pulling in a seed lib.
+  let s = 0x9e3779b9;
+  const rand = () => {
+    s = (Math.imul(s, 1664525) + 1013904223) | 0;
+    return ((s >>> 8) & 0xffffff) / 0x1000000;
+  };
+  const [br, bg, bb] = NOISE_BASE;
+  for (let i = 0; i < data.length; i += 4) {
+    const r = rand();
+    let dv = 0;
+    if (r < 0.08) dv = Math.floor(rand() * 10) + 4;
+    else if (r > 0.995) dv = Math.floor(rand() * 18) + 14;
+    else dv = Math.floor(rand() * 4) - 1;
+    data[i] = Math.max(0, Math.min(255, br + dv));
+    data[i + 1] = Math.max(0, Math.min(255, bg + dv));
+    data[i + 2] = Math.max(0, Math.min(255, bb + dv + 1));
+    data[i + 3] = 255;
+  }
+  tctx.putImageData(img, 0, 0);
+  const pat = ctx.createPattern(tile, "repeat");
+  if (!pat) return null;
+  noisePattern = pat;
+  return pat;
+}
+
+export function fillInside(
+  level: Level,
+  ctx: CanvasRenderingContext2D,
+  cameraX: number,
+  cameraY: number,
+) {
+  const poly = getPerimeter(level);
+  if (!poly || poly.length < 3) return;
+  const pat = getNoisePattern(ctx);
+  if (pat) {
+    const offsetX = (1 - NOISE_PARALLAX) * cameraX;
+    const offsetY = (1 - NOISE_PARALLAX) * cameraY;
+    pat.setTransform(
+      new DOMMatrix()
+        .translate(offsetX, offsetY)
+        .scale(1 / NOISE_PX_PER_UNIT, 1 / NOISE_PX_PER_UNIT),
+    );
+  }
+  ctx.fillStyle =
+    pat ?? `rgb(${NOISE_BASE[0]}, ${NOISE_BASE[1]}, ${NOISE_BASE[2]})`;
+  ctx.beginPath();
+  ctx.moveTo(poly[0]!.x, poly[0]!.y);
+  for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i]!.x, poly[i]!.y);
+  ctx.closePath();
+  ctx.fill();
+}
+
 export function fillOutside(
   level: Level,
   ctx: CanvasRenderingContext2D,
@@ -641,14 +706,39 @@ export function fillOutside(
 }
 
 export function draw(level: Level, ctx: CanvasRenderingContext2D) {
-  ctx.strokeStyle = "white";
-  ctx.lineWidth = 0.4;
   ctx.lineCap = "round";
+  ctx.beginPath();
   for (const w of level.walls) {
-    ctx.beginPath();
     ctx.moveTo(w.x1, w.y1);
     ctx.lineTo(w.x2, w.y2);
-    ctx.stroke();
+  }
+  ctx.strokeStyle = "rgba(255, 90, 90, 0.08)";
+  ctx.lineWidth = 2.0;
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(255, 110, 110, 0.18)";
+  ctx.lineWidth = 1.0;
+  ctx.stroke();
+  ctx.strokeStyle = "#ff5a5a";
+  ctx.lineWidth = 0.4;
+  ctx.stroke();
+
+  const seen = new Set<string>();
+  ctx.fillStyle = "#ff9a3a";
+  for (const w of level.walls) {
+    const kA = `${w.x1}|${w.y1}`;
+    if (!seen.has(kA)) {
+      seen.add(kA);
+      ctx.beginPath();
+      ctx.arc(w.x1, w.y1, 0.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    const kB = `${w.x2}|${w.y2}`;
+    if (!seen.has(kB)) {
+      seen.add(kB);
+      ctx.beginPath();
+      ctx.arc(w.x2, w.y2, 0.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
   for (let i = 0; i < level.satellites.length; i++) {
     const sat = level.satellites[i]!;
@@ -776,7 +866,7 @@ const INHIBITOR_COLOR_RGB: Partial<
   "control-reverser": [163, 74, 200],
 };
 
-const SPARK_RATE_PER_MS = 0.045;
+const SPARK_RATE_PER_MS = 0.07;
 const SPARK_SPREAD = Math.PI * 0.75;
 
 function emitInhibitorSparks(
@@ -812,15 +902,15 @@ function emitInhibitorSparks(
 
     for (let k = 0; k < count; k++) {
       const a = backA + (Math.random() - 0.5) * SPARK_SPREAD;
-      const speed = randRange(0.003, 0.008);
+      const speed = randRange(0.004, 0.011);
       const bright = 0.75 + Math.random() * 0.25;
       Particles.emit(particles, {
-        x: endX + (Math.random() - 0.5) * 0.18,
-        y: endY + (Math.random() - 0.5) * 0.18,
+        x: endX + (Math.random() - 0.5) * 0.25,
+        y: endY + (Math.random() - 0.5) * 0.25,
         vx: Math.cos(a) * speed,
         vy: Math.sin(a) * speed,
-        life: randRange(160, 380),
-        size: randRange(0.09, 0.2),
+        life: randRange(220, 480),
+        size: randRange(0.18, 0.36),
         r: Math.min(255, rgb[0] * bright + 40),
         g: Math.min(255, rgb[1] * bright + 40),
         b: Math.min(255, rgb[2] * bright + 40),
@@ -870,16 +960,16 @@ export function drawInhibitorFX(
     }
 
     ctx.strokeStyle = color;
-    ctx.lineWidth = active ? 0.08 : 0.05;
-    ctx.globalAlpha = active ? 0.4 : 0.2;
+    ctx.lineWidth = active ? 0.18 : 0.12;
+    ctx.globalAlpha = active ? 0.5 : 0.32;
     ctx.beginPath();
     ctx.moveTo(sat.x, sat.y);
     ctx.lineTo(endX, endY);
     ctx.stroke();
 
-    const dotR = active ? 0.22 : 0.13;
+    const dotR = active ? 0.32 : 0.22;
     ctx.fillStyle = color;
-    ctx.globalAlpha = active ? 0.95 : 0.55;
+    ctx.globalAlpha = active ? 0.95 : 0.7;
     for (let d = phase; d < len; d += INHIBITOR_DOT_PERIOD) {
       ctx.beginPath();
       ctx.arc(sat.x + ux * d, sat.y + uy * d, dotR, 0, Math.PI * 2);
@@ -887,9 +977,9 @@ export function drawInhibitorFX(
     }
 
     if (!active && hitT < 1) {
-      ctx.globalAlpha = 0.6;
+      ctx.globalAlpha = 0.7;
       ctx.beginPath();
-      ctx.arc(endX, endY, 0.3, 0, Math.PI * 2);
+      ctx.arc(endX, endY, 0.5, 0, Math.PI * 2);
       ctx.fill();
     }
 

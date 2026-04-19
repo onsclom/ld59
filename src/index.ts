@@ -342,6 +342,7 @@ startLoop(canvas, (ctx, dt) => {
       }
     }
 
+    Level.fillInside(state.level, ctx, state.camera.x, state.camera.y);
     Level.fillOutside(state.level, ctx, state.camera.x, state.camera.y);
     Level.draw(state.level, ctx);
     if (!state.edit.active) {
@@ -416,8 +417,8 @@ startLoop(canvas, (ctx, dt) => {
       ctx.font = "bold 48px monospace";
       ctx.lineWidth = 6;
       ctx.fillStyle = "#9cffcf";
-      ctx.strokeText("WIN", cx, cy - 64);
-      ctx.fillText("WIN", cx, cy - 64);
+      ctx.strokeText("LEVEL COMPLETE", cx, cy - 64);
+      ctx.fillText("LEVEL COMPLETE", cx, cy - 64);
 
       ctx.font = "bold 20px monospace";
       ctx.lineWidth = 5;
@@ -438,16 +439,26 @@ startLoop(canvas, (ctx, dt) => {
       ctx.save();
       ctx.fillStyle = "rgba(0,0,0,0.55)";
       ctx.fillRect(0, 0, rect.width, rect.height);
-      ctx.font = "bold 32px monospace";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.strokeStyle = "rgba(0,0,0,0.9)";
-      ctx.lineWidth = 6;
       ctx.lineJoin = "round";
       ctx.miterLimit = 2;
+
+      const cx = rect.width / 2;
+      const cy = rect.height / 2;
+
+      ctx.font = "bold 48px monospace";
+      ctx.lineWidth = 6;
       ctx.fillStyle = "#ff6666";
-      ctx.strokeText("R TO RESTART", rect.width / 2, rect.height / 2);
-      ctx.fillText("R TO RESTART", rect.width / 2, rect.height / 2);
+      ctx.strokeText("DEAD", cx, cy - 32);
+      ctx.fillText("DEAD", cx, cy - 32);
+
+      ctx.font = "bold 24px monospace";
+      ctx.lineWidth = 5;
+      ctx.fillStyle = "#eaeaea";
+      ctx.strokeText("R TO RETRY", cx, cy + 24);
+      ctx.fillText("R TO RETRY", cx, cy + 24);
       ctx.restore();
     }
   }
