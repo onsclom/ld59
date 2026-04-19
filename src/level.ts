@@ -462,9 +462,57 @@ function updateProjectiles(
     }
   }
 
+  for (let i = 0; i < list.length; i++) {
+    const a = list[i]!;
+    if (!a.alive) continue;
+    for (let j = i + 1; j < list.length; j++) {
+      const b = list[j]!;
+      if (!b.alive) continue;
+      if (!projectilesCollide(a, b)) continue;
+      a.alive = false;
+      b.alive = false;
+      emitExplosion(particles, a);
+      emitExplosion(particles, b);
+      if (a.kind === "fireball" || b.kind === "fireball")
+        Sound.sfx.fireballHit();
+      if (a.kind === "missile" || b.kind === "missile")
+        Sound.sfx.missileHit();
+      break;
+    }
+  }
+
   for (let i = list.length - 1; i >= 0; i--) {
     if (!list[i]!.alive) list.splice(i, 1);
   }
+}
+
+function projectilesCollide(a: Projectile.Projectile, b: Projectile.Projectile) {
+  if (a.kind === "fireball" && b.kind === "fireball") {
+    const r = Projectile.FIREBALL_HITBOX_R * 2;
+    const dx = a.x - b.x;
+    const dy = a.y - b.y;
+    return dx * dx + dy * dy <= r * r;
+  }
+  if (a.kind === "missile" && b.kind === "missile") {
+    const hw = Projectile.MISSILE_HITBOX_LEN / 2;
+    const hh = Projectile.MISSILE_HITBOX_W / 2;
+    return obbOverlapsObb(
+      a.x, a.y, a.angle, hw, hh,
+      b.x, b.y, b.angle, hw, hh,
+    );
+  }
+  const fb = a.kind === "fireball" ? a : b;
+  const ms = a.kind === "missile" ? a : b;
+  return circleOverlapsObb(
+    fb.x,
+    fb.y,
+    Projectile.FIREBALL_HITBOX_R,
+    ms.x,
+    ms.y,
+    ms.angle,
+    Projectile.MISSILE_HITBOX_LEN / 2,
+    Projectile.MISSILE_HITBOX_W / 2,
+  );
 }
 
 function projectileHitsPlayer(player: PlayerT, p: Projectile.Projectile) {
