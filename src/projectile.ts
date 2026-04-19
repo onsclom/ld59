@@ -16,13 +16,16 @@ export const FIREBALL_SPEED = 0.045;
 export const MISSILE_SPEED = 0.03;
 export const MISSILE_TURN_RATE = 0.00125;
 
+export const FIREBALL_HITBOX_R = 0.22;
+export const MISSILE_HITBOX_LEN = 0.95;
+export const MISSILE_HITBOX_W = 0.28;
+
 const FIREBALL_CORE_R = 0.35;
 const FIREBALL_MID_R = 0.6;
 const FIREBALL_GLOW_R = 1.0;
 
 const MISSILE_LEN = 2.2;
 const MISSILE_W = 0.75;
-const MISSILE_GLOW_R = 1.1;
 
 export function draw(ctx: CanvasRenderingContext2D, p: Projectile) {
   if (!p.alive) return;
@@ -48,12 +51,6 @@ function drawFireball(ctx: CanvasRenderingContext2D, p: Projectile) {
 function drawMissile(ctx: CanvasRenderingContext2D, p: Projectile) {
   ctx.save();
   ctx.translate(p.x, p.y);
-
-  ctx.fillStyle = "rgba(255, 140, 60, 0.28)";
-  ctx.beginPath();
-  ctx.arc(0, 0, MISSILE_GLOW_R, 0, Math.PI * 2);
-  ctx.fill();
-
   ctx.rotate(p.angle);
   const half = MISSILE_LEN / 2;
   const bodyLen = MISSILE_LEN * 0.78;

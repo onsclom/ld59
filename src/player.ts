@@ -47,31 +47,78 @@ const SMOKE_LIFE_MAX = 2000;
 const SMOKE_SIZE_MIN = 0.5;
 const SMOKE_SIZE_MAX = 1;
 
-const NOZZLE_W_FRAC = 0.9;
-const NOZZLE_H_FRAC = 0.18;
-const NOZZLE_OVERLAP = 0.05;
-const NOZZLE_INNER_W_FRAC = 0.8;
-const NOZZLE_INNER_H_FRAC = 0.45;
-const WINDOW_INSET_FRAC = 0.18;
-const WINDOW_TOP_FRAC = 0.15;
-const WINDOW_H_FRAC = 0.28;
-const WINDOW_HIGHLIGHT_TOP_FRAC = 0.1;
-const WINDOW_HIGHLIGHT_W_FRAC = 0.35;
-const WINDOW_HIGHLIGHT_H_FRAC = 0.2;
+const NOSE_LEN = 1.1;
+const COLLAR_H = 0.14;
 
-const COLOR_BODY = "#fff";
-const COLOR_WINDOW = "#4aa8ff";
-const COLOR_WINDOW_HIGHLIGHT = "#cfe7ff";
-const COLOR_NOZZLE_OUTER = "#555";
-const COLOR_NOZZLE_INNER = "#222";
-const COLOR_FLAME = "rgba(255, 150, 30, 0.95)";
+const WINDOW_CY = -0.75;
+const WINDOW_R = 0.38;
+const WINDOW_RIVET_COUNT = 6;
+const WINDOW_RIVET_R = 0.04;
+
+const HAZARD_CY = 0.55;
+const HAZARD_H = 0.36;
+const HAZARD_STRIPE_COUNT = 5;
+
+const SKIRT_H = 0.28;
+
+const FIN_INNER_TOP = 1.2;
+const FIN_INNER_BOTTOM = 2.42;
+const FIN_OUTER_Y = 2.5;
+const FIN_OUTER_DX = 0.32;
+
+const NOZZLE_FLANGE_Y = 2.5;
+const NOZZLE_FLANGE_H = 0.18;
+const NOZZLE_FLANGE_W = 1.5;
+const NOZZLE_FLANGE_BOLTS = 4;
+const NOZZLE_BELL_H = 0.48;
+const NOZZLE_BELL_TOP_W = 1.3;
+const NOZZLE_BELL_BOT_W = 1.65;
+const NOZZLE_INNER_TOP_W = 0.68;
+const NOZZLE_INNER_BOT_W = 1.08;
+
+const RIVET_R = 0.06;
+const RIVET_ROWS = [-0.2, 1.35, 2.12];
+
+const COLOR_BODY = "#e8ecf0";
+const COLOR_BODY_SHADOW = "#a6afbc";
+const COLOR_BODY_HIGHLIGHT = "#ffffff";
+const COLOR_BODY_EDGE = "#484d58";
+const COLOR_NOSE = "#c43a30";
+const COLOR_NOSE_SHADOW = "#7a1c1a";
+const COLOR_NOSE_CAP = "#ffd060";
+const COLOR_NOSE_CAP_GLOW = "rgba(255, 220, 120, 0.7)";
+const COLOR_WINDOW = "#5ab8ff";
+const COLOR_WINDOW_BACK = "#0c2850";
+const COLOR_WINDOW_FRAME = "#3a414c";
+const COLOR_WINDOW_HIGHLIGHT = "#e0f0ff";
+const COLOR_HAZARD_A = "#e0a820";
+const COLOR_HAZARD_B = "#1a1a1a";
+const COLOR_SKIRT = "#4a4f58";
+const COLOR_SKIRT_DARK = "#252830";
+const COLOR_SKIRT_RIVET = "#8a8e96";
+const COLOR_FIN = "#c43a30";
+const COLOR_FIN_SHADOW = "#7a1c1a";
+const COLOR_FIN_EDGE = "#3a0f0d";
+const COLOR_RIVET = "#2a2f36";
+const COLOR_NOZZLE_FLANGE = "#5a5a5a";
+const COLOR_NOZZLE_FLANGE_EDGE = "#2a2a2a";
+const COLOR_NOZZLE_BOLT = "#8a8e96";
+const COLOR_NOZZLE_BELL = "#2a2a2a";
+const COLOR_NOZZLE_BELL_HIGHLIGHT = "#6a6a6a";
+const COLOR_NOZZLE_THROAT = "#050505";
+const COLOR_NOZZLE_HEAT = "rgba(255, 120, 40, 0.65)";
 const COLOR_DEAD_OVERLAY = "rgba(255, 40, 40, 0.55)";
 
-const FLAME_BASE_HALF = 0.45;
-const FLAME_BASE_FLICKER = 0.08;
-const FLAME_LENGTH = 1.3;
-const FLAME_LENGTH_FLICKER = 0.2;
-const FLAME_FLICKER_PERIOD_MS = 25;
+const FLAME_FLICKER_PERIOD_MS = 28;
+const FLAME_LEN_OUTER = 1.8;
+const FLAME_LEN_MIDDLE = 1.2;
+const FLAME_LEN_CORE = 0.55;
+const FLAME_W_OUTER = 0.6;
+const FLAME_W_MIDDLE = 0.36;
+const FLAME_W_CORE = 0.18;
+const COLOR_FLAME_OUTER = "rgba(255, 110, 30, 0.9)";
+const COLOR_FLAME_MIDDLE = "rgba(255, 210, 90, 0.95)";
+const COLOR_FLAME_CORE = "rgba(255, 255, 235, 0.95)";
 
 export function create() {
   return {
@@ -145,8 +192,10 @@ export function update(
   if (!player.alive) return;
 
   let turnInput = 0;
-  if (Input.keysDown.has("a") || Input.keysDown.has("ArrowLeft")) turnInput -= 1;
-  if (Input.keysDown.has("d") || Input.keysDown.has("ArrowRight")) turnInput += 1;
+  if (Input.keysDown.has("a") || Input.keysDown.has("ArrowLeft"))
+    turnInput -= 1;
+  if (Input.keysDown.has("d") || Input.keysDown.has("ArrowRight"))
+    turnInput += 1;
   const wantTurn = turnInput !== 0;
   const deniedTurn = wantTurn && effects.turnDisabled;
   let turn = turnInput;
@@ -253,64 +302,359 @@ export function draw(
 ) {
   const w = player.width;
   const h = player.height;
+  const hw = w / 2;
+  const hh = h / 2;
 
   ctx.save();
   ctx.translate(player.x, player.y);
   ctx.rotate(player.rotation);
 
-  const nozW = w * NOZZLE_W_FRAC;
-  const nozH = h * NOZZLE_H_FRAC;
-
-  ctx.fillStyle = COLOR_NOZZLE_OUTER;
-  ctx.fillRect(-nozW / 2, h / 2 - NOZZLE_OVERLAP, nozW, nozH);
-  ctx.fillStyle = COLOR_NOZZLE_INNER;
-  ctx.fillRect(
-    (-nozW * NOZZLE_INNER_W_FRAC) / 2,
-    h / 2 + nozH / 2,
-    nozW * NOZZLE_INNER_W_FRAC,
-    nozH * NOZZLE_INNER_H_FRAC,
-  );
-
-  ctx.fillStyle = COLOR_BODY;
-  ctx.fillRect(-w / 2, -h / 2, w, h);
-
-  const winInset = w * WINDOW_INSET_FRAC;
-  const winTop = -h / 2 + h * WINDOW_TOP_FRAC;
-  const winW = w - winInset * 2;
-  const winH = h * WINDOW_H_FRAC;
-  ctx.fillStyle = COLOR_WINDOW;
-  ctx.fillRect(-w / 2 + winInset, winTop, winW, winH);
-  ctx.fillStyle = COLOR_WINDOW_HIGHLIGHT;
-  ctx.fillRect(
-    -w / 2 + winInset,
-    winTop + winH * WINDOW_HIGHLIGHT_TOP_FRAC,
-    winW * WINDOW_HIGHLIGHT_W_FRAC,
-    winH * WINDOW_HIGHLIGHT_H_FRAC,
-  );
-
-  if (player.thrusting) {
-    const flicker = Math.sin(performance.now() / FLAME_FLICKER_PERIOD_MS);
-    const baseY = h / 2 + nozH;
-    const halfBase = FLAME_BASE_HALF + FLAME_BASE_FLICKER * flicker;
-    const tipY = baseY + FLAME_LENGTH + FLAME_LENGTH_FLICKER * flicker;
-    ctx.fillStyle = COLOR_FLAME;
-    ctx.beginPath();
-    ctx.moveTo(-halfBase, baseY);
-    ctx.lineTo(halfBase, baseY);
-    ctx.lineTo(0, tipY);
-    ctx.closePath();
-    ctx.fill();
-  }
+  if (player.thrusting) drawFlame(ctx);
+  drawNozzle(ctx, player.thrusting);
+  drawFins(ctx, hw);
+  drawHull(ctx, w, h, hw, hh);
+  drawCollar(ctx, hw, hh);
+  drawWindow(ctx);
+  drawHazardBand(ctx, w, hw);
+  drawRivets(ctx, hw);
+  drawSkirt(ctx, hw, hh);
 
   if (!player.alive) {
     ctx.fillStyle = COLOR_DEAD_OVERLAY;
-    ctx.fillRect(-w / 2, -h / 2, w, h);
+    ctx.fillRect(-hw, -hh, w, h);
   }
 
   drawStatusRings(ctx, w, h, effects);
   drawDenyFlash(ctx, w, h, player.denyFlash);
 
   ctx.restore();
+}
+
+function drawHull(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  hw: number,
+  hh: number,
+) {
+  const top = -hh;
+  const bottom = hh;
+  const shoulderY = top + NOSE_LEN;
+
+  ctx.fillStyle = COLOR_BODY;
+  ctx.beginPath();
+  ctx.moveTo(0, top);
+  ctx.lineTo(hw, shoulderY);
+  ctx.lineTo(hw, bottom);
+  ctx.lineTo(-hw, bottom);
+  ctx.lineTo(-hw, shoulderY);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(0, top);
+  ctx.lineTo(hw, shoulderY);
+  ctx.lineTo(hw, bottom);
+  ctx.lineTo(hw - w * 0.22, bottom);
+  ctx.lineTo(hw - w * 0.22, shoulderY);
+  ctx.closePath();
+  ctx.clip();
+  ctx.fillStyle = COLOR_BODY_SHADOW;
+  ctx.fillRect(-hw, top, w, h);
+  ctx.restore();
+
+  ctx.save();
+  ctx.globalAlpha = 0.55;
+  ctx.fillStyle = COLOR_BODY_HIGHLIGHT;
+  ctx.fillRect(-hw, shoulderY, w * 0.08, h - NOSE_LEN);
+  ctx.globalAlpha = 1;
+  ctx.restore();
+
+  ctx.fillStyle = COLOR_NOSE;
+  ctx.beginPath();
+  ctx.moveTo(0, top);
+  ctx.lineTo(hw, shoulderY);
+  ctx.lineTo(-hw, shoulderY);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = COLOR_NOSE_SHADOW;
+  ctx.beginPath();
+  ctx.moveTo(0, top);
+  ctx.lineTo(hw, shoulderY);
+  ctx.lineTo(0, shoulderY);
+  ctx.closePath();
+  ctx.fill();
+
+  const capY = top + 0.14;
+  ctx.fillStyle = COLOR_NOSE_CAP_GLOW;
+  ctx.beginPath();
+  ctx.arc(0, capY, 0.16, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = COLOR_NOSE_CAP;
+  ctx.beginPath();
+  ctx.arc(0, capY, 0.09, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = COLOR_BODY_EDGE;
+  ctx.lineWidth = 0.05;
+  ctx.beginPath();
+  ctx.moveTo(0, top);
+  ctx.lineTo(hw, shoulderY);
+  ctx.lineTo(hw, bottom);
+  ctx.lineTo(-hw, bottom);
+  ctx.lineTo(-hw, shoulderY);
+  ctx.closePath();
+  ctx.stroke();
+}
+
+function drawCollar(ctx: CanvasRenderingContext2D, hw: number, hh: number) {
+  const y = -hh + NOSE_LEN - COLLAR_H / 2;
+  ctx.fillStyle = COLOR_SKIRT;
+  ctx.fillRect(-hw, y, hw * 2, COLLAR_H);
+  ctx.fillStyle = COLOR_SKIRT_DARK;
+  ctx.fillRect(-hw, y, hw * 2, 0.04);
+  ctx.fillRect(-hw, y + COLLAR_H - 0.04, hw * 2, 0.04);
+  ctx.fillStyle = COLOR_SKIRT_RIVET;
+  for (let i = 0; i < 3; i++) {
+    const x = -hw * 0.55 + i * hw * 0.55;
+    ctx.beginPath();
+    ctx.arc(x, y + COLLAR_H / 2, 0.04, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawWindow(ctx: CanvasRenderingContext2D) {
+  ctx.fillStyle = COLOR_WINDOW_BACK;
+  ctx.beginPath();
+  ctx.arc(0, WINDOW_CY, WINDOW_R, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = COLOR_WINDOW;
+  ctx.beginPath();
+  ctx.arc(0, WINDOW_CY, WINDOW_R - 0.08, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = COLOR_WINDOW_HIGHLIGHT;
+  ctx.beginPath();
+  ctx.arc(-0.08, WINDOW_CY - 0.08, (WINDOW_R - 0.08) * 0.55, Math.PI, Math.PI * 1.7);
+  ctx.lineTo(-0.08, WINDOW_CY - 0.08);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = COLOR_WINDOW_FRAME;
+  ctx.lineWidth = 0.08;
+  ctx.beginPath();
+  ctx.arc(0, WINDOW_CY, WINDOW_R - 0.04, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.fillStyle = COLOR_RIVET;
+  for (let i = 0; i < WINDOW_RIVET_COUNT; i++) {
+    const a = (i / WINDOW_RIVET_COUNT) * Math.PI * 2 + Math.PI / WINDOW_RIVET_COUNT;
+    const x = Math.cos(a) * (WINDOW_R + 0.05);
+    const y = WINDOW_CY + Math.sin(a) * (WINDOW_R + 0.05);
+    ctx.beginPath();
+    ctx.arc(x, y, WINDOW_RIVET_R, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawHazardBand(ctx: CanvasRenderingContext2D, w: number, hw: number) {
+  const y = HAZARD_CY - HAZARD_H / 2;
+  ctx.fillStyle = COLOR_HAZARD_B;
+  ctx.fillRect(-hw, y, w, HAZARD_H);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(-hw, y, w, HAZARD_H);
+  ctx.clip();
+  ctx.fillStyle = COLOR_HAZARD_A;
+  const span = w + HAZARD_H * 2;
+  const step = span / HAZARD_STRIPE_COUNT;
+  const stripeW = step * 0.5;
+  for (let i = 0; i < HAZARD_STRIPE_COUNT + 1; i++) {
+    const x0 = -hw - HAZARD_H + i * step;
+    ctx.beginPath();
+    ctx.moveTo(x0, y);
+    ctx.lineTo(x0 + stripeW, y);
+    ctx.lineTo(x0 + stripeW + HAZARD_H, y + HAZARD_H);
+    ctx.lineTo(x0 + HAZARD_H, y + HAZARD_H);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+
+  ctx.fillStyle = COLOR_BODY_EDGE;
+  ctx.fillRect(-hw, y - 0.02, w, 0.035);
+  ctx.fillRect(-hw, y + HAZARD_H - 0.015, w, 0.035);
+}
+
+function drawRivets(ctx: CanvasRenderingContext2D, hw: number) {
+  ctx.fillStyle = COLOR_RIVET;
+  for (const y of RIVET_ROWS) {
+    for (const sign of [-1, 1]) {
+      ctx.beginPath();
+      ctx.arc(sign * (hw - 0.12), y, RIVET_R, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+function drawSkirt(ctx: CanvasRenderingContext2D, hw: number, hh: number) {
+  const y = hh - SKIRT_H;
+  ctx.fillStyle = COLOR_SKIRT;
+  ctx.fillRect(-hw, y, hw * 2, SKIRT_H);
+  ctx.fillStyle = COLOR_SKIRT_DARK;
+  ctx.fillRect(-hw, y, hw * 2, 0.05);
+  ctx.fillRect(-hw, y + SKIRT_H - 0.05, hw * 2, 0.05);
+  ctx.fillStyle = COLOR_SKIRT_RIVET;
+  for (let i = 0; i < 4; i++) {
+    const x = -hw + 0.22 + i * ((hw * 2 - 0.44) / 3);
+    ctx.beginPath();
+    ctx.arc(x, y + SKIRT_H / 2, 0.05, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawFins(ctx: CanvasRenderingContext2D, hw: number) {
+  for (const sign of [-1, 1] as const) {
+    ctx.fillStyle = COLOR_FIN;
+    ctx.beginPath();
+    ctx.moveTo(sign * hw, FIN_INNER_TOP);
+    ctx.lineTo(sign * hw, FIN_INNER_BOTTOM);
+    ctx.lineTo(sign * (hw + FIN_OUTER_DX), FIN_OUTER_Y);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = COLOR_FIN_SHADOW;
+    ctx.beginPath();
+    ctx.moveTo(sign * hw, (FIN_INNER_TOP + FIN_INNER_BOTTOM) / 2);
+    ctx.lineTo(sign * hw, FIN_INNER_BOTTOM);
+    ctx.lineTo(sign * (hw + FIN_OUTER_DX * 0.6), FIN_OUTER_Y);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = COLOR_FIN_EDGE;
+    ctx.lineWidth = 0.05;
+    ctx.beginPath();
+    ctx.moveTo(sign * hw, FIN_INNER_TOP);
+    ctx.lineTo(sign * (hw + FIN_OUTER_DX), FIN_OUTER_Y);
+    ctx.stroke();
+  }
+}
+
+function drawNozzle(ctx: CanvasRenderingContext2D, thrusting: boolean) {
+  ctx.fillStyle = COLOR_NOZZLE_FLANGE;
+  ctx.fillRect(-NOZZLE_FLANGE_W / 2, NOZZLE_FLANGE_Y, NOZZLE_FLANGE_W, NOZZLE_FLANGE_H);
+  ctx.fillStyle = COLOR_NOZZLE_FLANGE_EDGE;
+  ctx.fillRect(-NOZZLE_FLANGE_W / 2, NOZZLE_FLANGE_Y, NOZZLE_FLANGE_W, 0.04);
+  ctx.fillRect(
+    -NOZZLE_FLANGE_W / 2,
+    NOZZLE_FLANGE_Y + NOZZLE_FLANGE_H - 0.04,
+    NOZZLE_FLANGE_W,
+    0.04,
+  );
+
+  ctx.fillStyle = COLOR_NOZZLE_BOLT;
+  for (let i = 0; i < NOZZLE_FLANGE_BOLTS; i++) {
+    const x =
+      -NOZZLE_FLANGE_W / 2 +
+      0.18 +
+      (i * (NOZZLE_FLANGE_W - 0.36)) / (NOZZLE_FLANGE_BOLTS - 1);
+    ctx.beginPath();
+    ctx.arc(x, NOZZLE_FLANGE_Y + NOZZLE_FLANGE_H / 2, 0.05, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const bellTopY = NOZZLE_FLANGE_Y + NOZZLE_FLANGE_H;
+  const bellBotY = bellTopY + NOZZLE_BELL_H;
+  ctx.fillStyle = COLOR_NOZZLE_BELL;
+  ctx.beginPath();
+  ctx.moveTo(-NOZZLE_BELL_TOP_W / 2, bellTopY);
+  ctx.lineTo(NOZZLE_BELL_TOP_W / 2, bellTopY);
+  ctx.lineTo(NOZZLE_BELL_BOT_W / 2, bellBotY);
+  ctx.lineTo(-NOZZLE_BELL_BOT_W / 2, bellBotY);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.save();
+  ctx.globalAlpha = 0.5;
+  ctx.fillStyle = COLOR_NOZZLE_BELL_HIGHLIGHT;
+  ctx.beginPath();
+  ctx.moveTo(-NOZZLE_BELL_TOP_W / 2 + 0.04, bellTopY);
+  ctx.lineTo(-NOZZLE_BELL_TOP_W / 2 + 0.14, bellTopY);
+  ctx.lineTo(-NOZZLE_BELL_BOT_W / 2 + 0.2, bellBotY);
+  ctx.lineTo(-NOZZLE_BELL_BOT_W / 2 + 0.08, bellBotY);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+
+  ctx.fillStyle = COLOR_NOZZLE_THROAT;
+  ctx.beginPath();
+  ctx.moveTo(-NOZZLE_INNER_TOP_W / 2, bellTopY + 0.02);
+  ctx.lineTo(NOZZLE_INNER_TOP_W / 2, bellTopY + 0.02);
+  ctx.lineTo(NOZZLE_INNER_BOT_W / 2, bellBotY - 0.02);
+  ctx.lineTo(-NOZZLE_INNER_BOT_W / 2, bellBotY - 0.02);
+  ctx.closePath();
+  ctx.fill();
+
+  if (thrusting) {
+    ctx.fillStyle = COLOR_NOZZLE_HEAT;
+    ctx.beginPath();
+    ctx.moveTo(-NOZZLE_INNER_TOP_W / 2 + 0.06, bellTopY + 0.05);
+    ctx.lineTo(NOZZLE_INNER_TOP_W / 2 - 0.06, bellTopY + 0.05);
+    ctx.lineTo(NOZZLE_INNER_BOT_W / 2 - 0.1, bellBotY - 0.05);
+    ctx.lineTo(-NOZZLE_INNER_BOT_W / 2 + 0.1, bellBotY - 0.05);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+function drawFlame(ctx: CanvasRenderingContext2D) {
+  const baseY = NOZZLE_FLANGE_Y + NOZZLE_FLANGE_H + NOZZLE_BELL_H * 0.6;
+  const t = performance.now();
+  const f1 = Math.sin(t / FLAME_FLICKER_PERIOD_MS);
+  const f2 = Math.sin(t / (FLAME_FLICKER_PERIOD_MS * 1.7) + 1.3);
+  const f3 = Math.sin(t / (FLAME_FLICKER_PERIOD_MS * 2.3) + 2.1);
+
+  drawFlameShape(
+    ctx,
+    COLOR_FLAME_OUTER,
+    baseY,
+    FLAME_W_OUTER + 0.08 * f2,
+    FLAME_LEN_OUTER + 0.22 * f1,
+  );
+  drawFlameShape(
+    ctx,
+    COLOR_FLAME_MIDDLE,
+    baseY,
+    FLAME_W_MIDDLE + 0.05 * f3,
+    FLAME_LEN_MIDDLE + 0.16 * f2,
+  );
+  drawFlameShape(
+    ctx,
+    COLOR_FLAME_CORE,
+    baseY,
+    FLAME_W_CORE + 0.03 * f1,
+    FLAME_LEN_CORE + 0.1 * f3,
+  );
+}
+
+function drawFlameShape(
+  ctx: CanvasRenderingContext2D,
+  color: string,
+  baseY: number,
+  halfW: number,
+  len: number,
+) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(-halfW, baseY);
+  ctx.quadraticCurveTo(-halfW * 1.1, baseY + len * 0.5, 0, baseY + len);
+  ctx.quadraticCurveTo(halfW * 1.1, baseY + len * 0.5, halfW, baseY);
+  ctx.closePath();
+  ctx.fill();
 }
 
 function drawStatusRings(
@@ -322,15 +666,22 @@ function drawStatusRings(
   if (!anyActive(effects)) return;
   const pulse = 0.55 + 0.45 * Math.sin(performance.now() / 160);
   const rings: string[] = [];
-  if (effects.thrustDisabled) rings.push(Satellite.TYPE_COLORS["thrust-inhibitor"]);
+  if (effects.thrustDisabled)
+    rings.push(Satellite.TYPE_COLORS["thrust-inhibitor"]);
   if (effects.turnDisabled) rings.push(Satellite.TYPE_COLORS["turn-inhibitor"]);
-  if (effects.controlsReversed) rings.push(Satellite.TYPE_COLORS["control-reverser"]);
+  if (effects.controlsReversed)
+    rings.push(Satellite.TYPE_COLORS["control-reverser"]);
   let inset = 0.35;
   ctx.lineWidth = 0.18;
   for (const color of rings) {
     ctx.strokeStyle = color;
     ctx.globalAlpha = 0.45 + 0.4 * pulse;
-    ctx.strokeRect(-w / 2 - inset, -h / 2 - inset, w + inset * 2, h + inset * 2);
+    ctx.strokeRect(
+      -w / 2 - inset,
+      -h / 2 - inset,
+      w + inset * 2,
+      h + inset * 2,
+    );
     inset += 0.35;
   }
   ctx.globalAlpha = 1;

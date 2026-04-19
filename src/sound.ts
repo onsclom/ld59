@@ -323,7 +323,6 @@ export const controlReverse = makeLoop(
   },
 );
 
-// Convenience presets you'll actually reach for during a jam.
 export const sfx = {
   jump: () => playBlip(300, 900, 0.12, "square", 0.15),
   pickup: () => playBlip(600, 1200, 0.08, "triangle", 0.2),

@@ -60,6 +60,11 @@ export function emit(
   system.next = (system.next + 1) % system.particles.length;
 }
 
+export function clear(system: ParticleSystem) {
+  for (const p of system.particles) p.life = 0;
+  system.next = 0;
+}
+
 export function update(system: ParticleSystem, dt: number) {
   for (const p of system.particles) {
     if (p.life <= 0) continue;

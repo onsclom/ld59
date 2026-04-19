@@ -1,5 +1,4 @@
 import { startLoop } from "./game-loop";
-import { mod } from "./game-math";
 import * as Camera from "./camera";
 import * as Edit from "./edit";
 import * as Input from "./input";
@@ -8,6 +7,7 @@ import * as Particles from "./particles";
 import * as Player from "./player";
 import * as Satellite from "./satellite";
 import * as Sound from "./sound";
+import * as Transitions from "./transitions";
 
 let canvas = document.querySelector<HTMLCanvasElement>("canvas");
 if (!canvas) {
@@ -25,6 +25,8 @@ function createInitState() {
     currentLevelIndex: 0,
     level: levels[0]!,
     edit: Edit.create(),
+    transition: Transitions.create(),
+    gameStartedAt: performance.now(),
   };
 }
 const state = createInitState();
@@ -33,14 +35,6 @@ function serializeLevels() {
   return JSON.stringify(state.levels.map(Level.toData));
 }
 let savedSnapshot = serializeLevels();
-
-function switchLevel(dir: number) {
-  const newIdx = mod(state.currentLevelIndex + dir, state.levels.length);
-  state.currentLevelIndex = newIdx;
-  state.level = state.levels[newIdx]!;
-  Player.reset(state.player);
-  Level.resetDynamic(state.level);
-}
 
 function insertLevelAfter() {
   const level = Level.create();
@@ -105,6 +99,7 @@ loadLevels()
     state.level = state.levels[0]!;
     Player.reset(state.player);
     savedSnapshot = serializeLevels();
+    state.gameStartedAt = performance.now();
   })
   .catch((err) => console.warn("load error", err));
 
@@ -142,6 +137,13 @@ const STATUS_CHIP_ORDER: (keyof Player.StatusEffects)[] = [
   "turnDisabled",
   "controlsReversed",
 ];
+
+function formatTimeMs(ms: number): string {
+  const total = ms / 1000;
+  const m = Math.floor(total / 60);
+  const s = total - m * 60;
+  return `${m}:${s.toFixed(2).padStart(5, "0")}`;
+}
 
 function drawStatusHUD(
   ctx: CanvasRenderingContext2D,
@@ -211,19 +213,37 @@ startLoop(canvas, (ctx, dt) => {
     }
   }
 
-  if (Input.keysJustPressed.has("q")) switchLevel(-1);
-  if (Input.keysJustPressed.has("e")) switchLevel(1);
+  const transitionLocked = Transitions.isLocked(state.transition);
+
+  if (!transitionLocked && Input.keysJustPressed.has("q")) {
+    const action = { kind: "switchLevel" as const, dir: -1 };
+    if (state.edit.active) Transitions.apply(state, action);
+    else Transitions.begin(state.transition, action);
+  }
+  if (!transitionLocked && Input.keysJustPressed.has("e")) {
+    const action = { kind: "switchLevel" as const, dir: 1 };
+    if (state.edit.active) Transitions.apply(state, action);
+    else Transitions.begin(state.transition, action);
+  }
 
   if (state.edit.active) {
     if (Input.keysJustPressed.has("n")) insertLevelAfter();
     if (Input.keysJustPressed.has("x")) deleteCurrentLevel();
   }
 
-  if (Input.keysJustPressed.has("r")) {
-    Player.reset(state.player);
-    Level.resetDynamic(state.level);
+  if (!transitionLocked && Input.keysJustPressed.has("r")) {
+    const wasEdit = state.edit.active;
     state.edit.active = false;
     state.edit.pendingStart = null;
+    const action = { kind: "restart" as const };
+    if (wasEdit) Transitions.apply(state, action);
+    else Transitions.begin(state.transition, action);
+  }
+
+  Transitions.update(state.transition, state, dt);
+
+  if (!state.edit.active && !state.level.dynamic.won) {
+    state.level.stats.timeMs += dt;
   }
 
   if (state.edit.active) {
@@ -322,7 +342,7 @@ startLoop(canvas, (ctx, dt) => {
       }
     }
 
-    Level.fillOutside(state.level, ctx);
+    Level.fillOutside(state.level, ctx, state.camera.x, state.camera.y);
     Level.draw(state.level, ctx);
     if (!state.edit.active) {
       Level.drawTransmissionFX(state.level, state.player, ctx);
@@ -387,18 +407,32 @@ startLoop(canvas, (ctx, dt) => {
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.strokeStyle = "rgba(0,0,0,0.9)";
-      ctx.lineWidth = 6;
       ctx.lineJoin = "round";
       ctx.miterLimit = 2;
+
+      const cx = rect.width / 2;
+      const cy = rect.height / 2;
+
       ctx.font = "bold 48px monospace";
+      ctx.lineWidth = 6;
       ctx.fillStyle = "#9cffcf";
-      ctx.strokeText("WIN", rect.width / 2, rect.height / 2 - 26);
-      ctx.fillText("WIN", rect.width / 2, rect.height / 2 - 26);
-      ctx.font = "bold 22px monospace";
+      ctx.strokeText("WIN", cx, cy - 64);
+      ctx.fillText("WIN", cx, cy - 64);
+
+      ctx.font = "bold 20px monospace";
       ctx.lineWidth = 5;
+      ctx.fillStyle = "#eaeaea";
+      const timeText = `TIME  ${formatTimeMs(state.level.stats.timeMs)}`;
+      ctx.strokeText(timeText, cx, cy - 10);
+      ctx.fillText(timeText, cx, cy - 10);
+      const resetText = `RESETS  ${state.level.stats.resets}`;
+      ctx.strokeText(resetText, cx, cy + 18);
+      ctx.fillText(resetText, cx, cy + 18);
+
+      ctx.font = "bold 22px monospace";
       ctx.fillStyle = "#cfe7ff";
-      ctx.strokeText("E FOR NEXT LEVEL", rect.width / 2, rect.height / 2 + 24);
-      ctx.fillText("E FOR NEXT LEVEL", rect.width / 2, rect.height / 2 + 24);
+      ctx.strokeText("E FOR NEXT LEVEL", cx, cy + 64);
+      ctx.fillText("E FOR NEXT LEVEL", cx, cy + 64);
       ctx.restore();
     } else if (!state.player.alive) {
       ctx.save();
@@ -417,6 +451,8 @@ startLoop(canvas, (ctx, dt) => {
       ctx.restore();
     }
   }
+
+  Transitions.drawOverlay(ctx, state.transition, rect.width, rect.height);
 
   Input.resetInput();
 });

@@ -1,4 +1,12 @@
-import { randRange, segmentIntersectT, segmentsIntersect } from "./game-math";
+import {
+  circleIntersectsSegment,
+  circleOverlapsObb,
+  obbOverlapsObb,
+  randRange,
+  segmentIntersectT,
+  segmentIntersectsObb,
+  segmentsIntersect,
+} from "./game-math";
 import * as Particles from "./particles";
 import * as Player from "./player";
 import * as Projectile from "./projectile";
@@ -28,6 +36,13 @@ function createDynamic() {
   };
 }
 
+function createStats() {
+  return {
+    resets: 0,
+    timeMs: 0,
+  };
+}
+
 export function create() {
   return {
     walls: [] as Wall[],
@@ -35,6 +50,7 @@ export function create() {
     perimeter: null as Point[] | null,
     dirty: true,
     dynamic: createDynamic(),
+    stats: createStats(),
   };
 }
 
@@ -299,6 +315,7 @@ export function update(
 
   updateShooters(level, player, dt);
   updateProjectiles(level, player, particles, dt);
+  emitInhibitorSparks(level, player, particles, dt);
 }
 
 function updateShooters(level: Level, player: PlayerT, dt: number) {
@@ -311,8 +328,7 @@ function updateShooters(level: Level, player: PlayerT, dt: number) {
     const current = level.dynamic.aimAngles[i] ?? TURRET_REST_ANGLE;
     let target: number;
     if (!started) target = TURRET_REST_ANGLE;
-    else if (hasLOS)
-      target = Math.atan2(player.y - sat.y, player.x - sat.x);
+    else if (hasLOS) target = Math.atan2(player.y - sat.y, player.x - sat.x);
     else target = current;
     let diff = target - current;
     while (diff > Math.PI) diff -= 2 * Math.PI;
@@ -414,9 +430,17 @@ function updateProjectiles(
     const newY = p.y + p.vy * dt;
 
     const wallT = firstWallHitT(level, prevX, prevY, newX, newY);
-    if (wallT <= 1) {
+    let hitWall = wallT <= 1;
+    if (hitWall) {
       p.x = prevX + (newX - prevX) * wallT;
       p.y = prevY + (newY - prevY) * wallT;
+    } else {
+      p.x = newX;
+      p.y = newY;
+      if (projectileShapeHitsWalls(level, p)) hitWall = true;
+    }
+
+    if (hitWall) {
       p.alive = false;
       emitExplosion(particles, p);
       if (p.kind === "fireball") Sound.sfx.fireballHit();
@@ -424,10 +448,7 @@ function updateProjectiles(
       continue;
     }
 
-    p.x = newX;
-    p.y = newY;
-
-    if (projectileHitsPlayer(player, prevX, prevY, p.x, p.y)) {
+    if (projectileHitsPlayer(player, p)) {
       p.alive = false;
       emitExplosion(particles, p);
       player.alive = false;
@@ -446,18 +467,60 @@ function updateProjectiles(
   }
 }
 
-function projectileHitsPlayer(
-  player: PlayerT,
-  x1: number,
-  y1: number,
-  x2: number,
-  y2: number,
-) {
-  const c = Player.corners(player);
-  for (let i = 0; i < 4; i++) {
-    const a = c[i]!;
-    const b = c[(i + 1) % 4]!;
-    if (segmentsIntersect(x1, y1, x2, y2, a.x, a.y, b.x, b.y)) return true;
+function projectileHitsPlayer(player: PlayerT, p: Projectile.Projectile) {
+  const phw = player.width / 2;
+  const phh = player.height / 2;
+  if (p.kind === "fireball") {
+    return circleOverlapsObb(
+      p.x,
+      p.y,
+      Projectile.FIREBALL_HITBOX_R,
+      player.x,
+      player.y,
+      player.rotation,
+      phw,
+      phh,
+    );
+  }
+  return obbOverlapsObb(
+    p.x,
+    p.y,
+    p.angle,
+    Projectile.MISSILE_HITBOX_LEN / 2,
+    Projectile.MISSILE_HITBOX_W / 2,
+    player.x,
+    player.y,
+    player.rotation,
+    phw,
+    phh,
+  );
+}
+
+function projectileShapeHitsWalls(level: Level, p: Projectile.Projectile) {
+  if (p.kind === "fireball") {
+    for (const w of level.walls) {
+      if (
+        circleIntersectsSegment(
+          p.x,
+          p.y,
+          Projectile.FIREBALL_HITBOX_R,
+          w.x1,
+          w.y1,
+          w.x2,
+          w.y2,
+        )
+      )
+        return true;
+    }
+    return false;
+  }
+  const hw = Projectile.MISSILE_HITBOX_LEN / 2;
+  const hh = Projectile.MISSILE_HITBOX_W / 2;
+  for (const w of level.walls) {
+    if (
+      segmentIntersectsObb(w.x1, w.y1, w.x2, w.y2, p.x, p.y, p.angle, hw, hh)
+    )
+      return true;
   }
   return false;
 }
@@ -518,39 +581,57 @@ export function drawProjectiles(level: Level, ctx: CanvasRenderingContext2D) {
 }
 
 const CHECKER_CELL = 5;
+const CHECKER_PX_PER_UNIT = 16;
+const CHECKER_PARALLAX = 0.4;
+const CHECKER_DARK = "#0c0c10";
+const CHECKER_LIGHT = "#16161c";
+// const CHECKER_DARK = "#9e9e9e";
+// const CHECKER_LIGHT = "#bdbdbd";
+
 let checkerPattern: CanvasPattern | null = null;
 function getCheckerPattern(
   ctx: CanvasRenderingContext2D,
 ): CanvasPattern | null {
   if (checkerPattern) return checkerPattern;
-  const PX_PER_UNIT = 16;
   const tile = document.createElement("canvas");
-  const cellPx = CHECKER_CELL * PX_PER_UNIT;
+  const cellPx = CHECKER_CELL * CHECKER_PX_PER_UNIT;
   tile.width = cellPx * 2;
   tile.height = cellPx * 2;
   const tctx = tile.getContext("2d");
   if (!tctx) return null;
-  tctx.fillStyle = "#bdbdbd";
+  tctx.fillStyle = CHECKER_LIGHT;
   tctx.fillRect(0, 0, cellPx * 2, cellPx * 2);
-  tctx.fillStyle = "#9e9e9e";
+  tctx.fillStyle = CHECKER_DARK;
   tctx.fillRect(0, 0, cellPx, cellPx);
   tctx.fillRect(cellPx, cellPx, cellPx, cellPx);
   const pat = ctx.createPattern(tile, "repeat");
   if (!pat) return null;
-  // Pattern source is 2*cellPx pixels wide but represents 2*CHECKER_CELL world
-  // units. Scale the pattern so 1 source pixel = 1 / PX_PER_UNIT world units,
-  // making the pattern tile in world coordinates (so it translates/scales with
-  // the camera).
-  pat.setTransform(new DOMMatrix().scale(1 / PX_PER_UNIT, 1 / PX_PER_UNIT));
   checkerPattern = pat;
   return pat;
 }
 
-export function fillOutside(level: Level, ctx: CanvasRenderingContext2D) {
+export function fillOutside(
+  level: Level,
+  ctx: CanvasRenderingContext2D,
+  cameraX: number,
+  cameraY: number,
+) {
   const poly = getPerimeter(level);
   if (!poly || poly.length < 3) return;
   const pat = getCheckerPattern(ctx);
-  ctx.fillStyle = pat ?? "#bdbdbd";
+  if (pat) {
+    // Scale source pixels to world units, then offset by (1 - parallax) *
+    // camera position so the pattern moves slower than the camera in screen
+    // space, producing a parallax effect against the world.
+    const offsetX = (1 - CHECKER_PARALLAX) * cameraX;
+    const offsetY = (1 - CHECKER_PARALLAX) * cameraY;
+    pat.setTransform(
+      new DOMMatrix()
+        .translate(offsetX, offsetY)
+        .scale(1 / CHECKER_PX_PER_UNIT, 1 / CHECKER_PX_PER_UNIT),
+    );
+  }
+  ctx.fillStyle = pat ?? CHECKER_DARK;
   ctx.beginPath();
   ctx.rect(-1e6, -1e6, 2e6, 2e6);
   ctx.moveTo(poly[0]!.x, poly[0]!.y);
@@ -590,7 +671,10 @@ export function draw(level: Level, ctx: CanvasRenderingContext2D) {
 
 const NODE_RING_COLOR = "rgba(74, 224, 160, 0.35)";
 const NODE_PROGRESS_COLOR = "#9cffcf";
-const NODE_LINK_COLOR = "rgba(156, 255, 207, 0.85)";
+const NODE_LINK_BASE_COLOR = "rgba(156, 255, 207, 0.28)";
+const NODE_LINK_DOT_COLOR = "#c8ffe4";
+const NODE_LINK_DOT_PERIOD = 0.55;
+const NODE_LINK_DOT_SPEED = 0.012;
 
 export function drawTransmissionFX(
   level: Level,
@@ -606,10 +690,12 @@ export function drawTransmissionFX(
     ctx.strokeStyle = NODE_RING_COLOR;
     ctx.lineWidth = 0.15;
     ctx.setLineDash([0.6, 0.6]);
+    ctx.lineDashOffset = -performance.now() * 0.0012;
     ctx.beginPath();
     ctx.arc(sat.x, sat.y, NODE_RADIUS, 0, Math.PI * 2);
     ctx.stroke();
     ctx.setLineDash([]);
+    ctx.lineDashOffset = 0;
 
     const progress = level.dynamic.nodeProgress[i] ?? 0;
     if (progress > 0) {
@@ -628,15 +714,39 @@ export function drawTransmissionFX(
     }
 
     if (!player.alive) continue;
-    const d = Math.hypot(player.x - sat.x, player.y - sat.y);
-    if (d <= NODE_RADIUS && losClear(level, player.x, player.y, sat.x, sat.y)) {
-      ctx.strokeStyle = NODE_LINK_COLOR;
-      ctx.lineWidth = 0.15;
+    const dx = player.x - sat.x;
+    const dy = player.y - sat.y;
+    const len = Math.hypot(dx, dy);
+    if (len > NODE_RADIUS) continue;
+    if (!losClear(level, player.x, player.y, sat.x, sat.y)) continue;
+    if (len < 0.001) continue;
+
+    const ux = dx / len;
+    const uy = dy / len;
+
+    ctx.save();
+    ctx.strokeStyle = NODE_LINK_BASE_COLOR;
+    ctx.lineWidth = 0.08;
+    ctx.beginPath();
+    ctx.moveTo(sat.x, sat.y);
+    ctx.lineTo(player.x, player.y);
+    ctx.stroke();
+
+    const now = performance.now();
+    const phase =
+      (((now * NODE_LINK_DOT_SPEED) % NODE_LINK_DOT_PERIOD) +
+        NODE_LINK_DOT_PERIOD) %
+      NODE_LINK_DOT_PERIOD;
+
+    ctx.fillStyle = NODE_LINK_DOT_COLOR;
+    for (let d = phase; d < len; d += NODE_LINK_DOT_PERIOD) {
+      const tfrac = d / len;
+      const r = 0.12 + 0.04 * Math.sin(tfrac * Math.PI);
       ctx.beginPath();
-      ctx.moveTo(sat.x, sat.y);
-      ctx.lineTo(player.x, player.y);
-      ctx.stroke();
+      ctx.arc(sat.x + ux * d, sat.y + uy * d, r, 0, Math.PI * 2);
+      ctx.fill();
     }
+    ctx.restore();
   }
 }
 
@@ -657,6 +767,67 @@ function firstWallHitT(
 
 const INHIBITOR_DOT_PERIOD = 1.2;
 const INHIBITOR_DOT_SPEED = 0.006;
+
+const INHIBITOR_COLOR_RGB: Partial<
+  Record<Satellite.SatelliteType, [number, number, number]>
+> = {
+  "turn-inhibitor": [224, 122, 42],
+  "thrust-inhibitor": [58, 160, 208],
+  "control-reverser": [163, 74, 200],
+};
+
+const SPARK_RATE_PER_MS = 0.045;
+const SPARK_SPREAD = Math.PI * 0.75;
+
+function emitInhibitorSparks(
+  level: Level,
+  player: PlayerT,
+  particles: ParticleSystem,
+  dt: number,
+) {
+  for (let i = 0; i < level.satellites.length; i++) {
+    const sat = level.satellites[i]!;
+    const rgb = INHIBITOR_COLOR_RGB[sat.type];
+    if (!rgb) continue;
+    const active = level.dynamic.activeInhibitors.has(i);
+    if (active) continue;
+    const dx = player.x - sat.x;
+    const dy = player.y - sat.y;
+    const len = Math.hypot(dx, dy);
+    if (len < 0.001) continue;
+    const hitT = Math.min(
+      1,
+      firstWallHitT(level, sat.x, sat.y, player.x, player.y),
+    );
+    if (hitT >= 1) continue;
+    const endX = sat.x + dx * hitT;
+    const endY = sat.y + dy * hitT;
+    const ux = dx / len;
+    const uy = dy / len;
+    const backA = Math.atan2(-uy, -ux);
+
+    const expected = dt * SPARK_RATE_PER_MS;
+    let count = Math.floor(expected);
+    if (Math.random() < expected - count) count++;
+
+    for (let k = 0; k < count; k++) {
+      const a = backA + (Math.random() - 0.5) * SPARK_SPREAD;
+      const speed = randRange(0.003, 0.008);
+      const bright = 0.75 + Math.random() * 0.25;
+      Particles.emit(particles, {
+        x: endX + (Math.random() - 0.5) * 0.18,
+        y: endY + (Math.random() - 0.5) * 0.18,
+        vx: Math.cos(a) * speed,
+        vy: Math.sin(a) * speed,
+        life: randRange(160, 380),
+        size: randRange(0.09, 0.2),
+        r: Math.min(255, rgb[0] * bright + 40),
+        g: Math.min(255, rgb[1] * bright + 40),
+        b: Math.min(255, rgb[2] * bright + 40),
+      });
+    }
+  }
+}
 
 export function drawInhibitorFX(
   level: Level,

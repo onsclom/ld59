@@ -21,12 +21,16 @@ const SOLAR_STRIP_H = 0.5;
 const SOLAR_STRIP_INSET = 0.15;
 const PANEL_LINE_W = 0.05;
 
-const TX_BODY_W = 2.2;
-const TX_BODY_H = 2.2;
-const TX_DISH_R = 1.6;
-const TX_DISH_RIM_W = 0.12;
-const TX_DISH_OFFSET = TX_BODY_H / 2 + 0.2;
-const TX_PULSE_R = 0.28;
+const TX_HEX_R = 1.05;
+const TX_RING_R = 1.7;
+const TX_RING_W = 0.14;
+const TX_RING_GAP = 0.28;
+const TX_RING_SEGMENTS = 3;
+const TX_RING_SPEED = 0.45;
+const TX_PYLON_LEN = 0.55;
+const TX_PYLON_W = 0.16;
+const TX_CORE_R = 0.4;
+const TX_PULSE_MAX_EXTRA = 1.3;
 
 const COLOR_ARM = "#888";
 const COLOR_BODY_DEFAULT = "#bbb";
@@ -39,9 +43,9 @@ const COLOR_TURN = "#e07a2a";
 const COLOR_THRUST = "#3aa0d0";
 const COLOR_REVERSE = "#a34ac8";
 const COLOR_TX_BODY = "#4ae0a0";
-const COLOR_TX_DISH = "#e8fff5";
-const COLOR_TX_DISH_RIM = "#4ae0a0";
-const COLOR_TX_PULSE = "#9cffcf";
+const COLOR_TX_CORE_BG = "#0a2820";
+const COLOR_TX_BRIGHT = "#e8fff5";
+const COLOR_TX_GLOW = "#9cffcf";
 const COLOR_CANNON = "#d0342a";
 const COLOR_MISSILE = "#e0a820";
 
@@ -227,72 +231,129 @@ function drawMissileLauncher(
   aim: number,
   charge: number,
 ) {
-  const baseW = 2.9;
-  const baseH = 2.5;
+  const baseR = 1.5;
 
-  ctx.fillStyle = "#1c1c1c";
-  ctx.fillRect(-baseW / 2, -baseH / 2, baseW, baseH);
-
-  const stripeW = 0.3;
-  for (let x = -baseW / 2 + 0.05; x < baseW / 2 - 0.05; x += stripeW * 2) {
-    ctx.fillStyle = COLOR_MISSILE;
-    ctx.fillRect(x, -baseH / 2 + 0.05, Math.min(stripeW, baseW / 2 - 0.05 - x), 0.2);
-    ctx.fillRect(x, baseH / 2 - 0.25, Math.min(stripeW, baseW / 2 - 0.05 - x), 0.2);
-  }
-
-  ctx.fillStyle = "#2a2a2a";
-  ctx.fillRect(-baseW / 2 + 0.3, -baseH / 2 + 0.35, baseW - 0.6, baseH - 0.7);
-
-  const radarR = 0.22;
-  const radarHot = charge > 0.4;
-  ctx.fillStyle = radarHot
-    ? `rgba(255, ${140 - charge * 60}, ${40}, ${0.7 + 0.3 * charge})`
-    : "rgba(140, 200, 255, 0.85)";
+  ctx.fillStyle = "#272727";
   ctx.beginPath();
-  ctx.arc(0, 0, radarR, 0, Math.PI * 2);
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
+    const x = Math.cos(a) * baseR;
+    const y = Math.sin(a) * baseR;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
   ctx.fill();
   ctx.strokeStyle = "#555";
-  ctx.lineWidth = 0.06;
+  ctx.lineWidth = 0.12;
   ctx.stroke();
+
+  const hazardOuter = 1.05;
+  const hazardInner = 0.78;
+  const segCount = 12;
+  for (let i = 0; i < segCount; i++) {
+    const a0 = (i / segCount) * Math.PI * 2;
+    const a1 = ((i + 1) / segCount) * Math.PI * 2;
+    ctx.fillStyle = i % 2 === 0 ? COLOR_MISSILE : "#1a1a1a";
+    ctx.beginPath();
+    ctx.arc(0, 0, hazardOuter, a0, a1);
+    ctx.arc(0, 0, hazardInner, a1, a0, true);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  ctx.fillStyle = "#1f1f1f";
+  ctx.beginPath();
+  ctx.arc(0, 0, hazardInner, 0, Math.PI * 2);
+  ctx.fill();
+
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
+    const r = baseR * 0.88;
+    ctx.fillStyle = "#3a3a3a";
+    ctx.beginPath();
+    ctx.arc(Math.cos(a) * r, Math.sin(a) * r, 0.09, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const warnAlpha = 0.15 + 0.5 * charge;
+  ctx.fillStyle = `rgba(255, ${90 + charge * 80}, ${40 + charge * 30}, ${warnAlpha})`;
+  ctx.beginPath();
+  ctx.arc(0, 0, 0.55 + 0.1 * charge, 0, Math.PI * 2);
+  ctx.fill();
 
   ctx.save();
   ctx.rotate(aim);
 
-  const pivotR = 0.5;
+  const pivotR = 0.58;
   ctx.fillStyle = "#3a3a3a";
   ctx.beginPath();
   ctx.arc(0, 0, pivotR, 0, Math.PI * 2);
   ctx.fill();
+  ctx.strokeStyle = "#5a5a5a";
+  ctx.lineWidth = 0.06;
+  ctx.stroke();
 
-  const tubeL = 1.4;
-  const tubeW = 0.4;
-  const offsets = [-0.6, 0, 0.6];
-  for (const offset of offsets) {
-    ctx.fillStyle = "#3a3a3a";
-    ctx.fillRect(0.25, offset - tubeW / 2, tubeL, tubeW);
-    ctx.strokeStyle = "#666";
-    ctx.lineWidth = 0.06;
-    ctx.strokeRect(0.25, offset - tubeW / 2, tubeL, tubeW);
+  const lensR = 0.18;
+  const lensHot = charge > 0.4;
+  ctx.fillStyle = lensHot
+    ? `rgba(255, ${160 - charge * 60}, 50, 1)`
+    : "rgba(140, 200, 255, 0.95)";
+  ctx.beginPath();
+  ctx.arc(pivotR * 0.45, 0, lensR, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "#1a1a1a";
+  ctx.lineWidth = 0.04;
+  ctx.stroke();
+
+  const tubeL = 1.85;
+  const tubeW = 0.48;
+  const tubeStart = 0.18;
+  const tubeOffset = 0.48;
+  for (const offsetSign of [-1, 1] as const) {
+    const offset = offsetSign * tubeOffset;
+
+    ctx.fillStyle = "#323232";
+    ctx.fillRect(tubeStart, offset - tubeW / 2, tubeL, tubeW);
+    ctx.strokeStyle = "#5a5a5a";
+    ctx.lineWidth = 0.05;
+    ctx.strokeRect(tubeStart, offset - tubeW / 2, tubeL, tubeW);
+
+    ctx.fillStyle = "#1d1d1d";
+    ctx.fillRect(tubeStart, offset - tubeW / 2, tubeL, 0.07);
+    ctx.fillRect(tubeStart, offset + tubeW / 2 - 0.07, tubeL, 0.07);
+
     ctx.fillStyle = "#1a1a1a";
-    ctx.fillRect(0.25, offset - 0.04, tubeL, 0.08);
+    for (let b = 0; b < 3; b++) {
+      const bx = tubeStart + 0.42 + b * 0.42;
+      ctx.fillRect(bx, offset - tubeW / 2, 0.05, tubeW);
+    }
 
-    const tipX = 0.25 + tubeL;
-    const tipLen = 0.4;
+    ctx.fillStyle = COLOR_MISSILE;
+    ctx.fillRect(tubeStart + 0.1, offset - tubeW / 2 + 0.08, 0.1, tubeW - 0.16);
+
+    const tipX = tubeStart + tubeL;
+    const tipLen = 0.5;
     const hot = charge > 0.3;
     ctx.fillStyle = hot
-      ? `rgba(255, ${140 + charge * 60}, ${50 - charge * 30}, 1)`
-      : "#bbb";
+      ? `rgba(255, ${140 + charge * 70}, 60, 1)`
+      : "#bfbfbf";
     ctx.beginPath();
-    ctx.moveTo(tipX, offset - tubeW / 2 + 0.05);
+    ctx.moveTo(tipX, offset - tubeW / 2 + 0.06);
     ctx.lineTo(tipX + tipLen, offset);
-    ctx.lineTo(tipX, offset + tubeW / 2 - 0.05);
+    ctx.lineTo(tipX, offset + tubeW / 2 - 0.06);
     ctx.closePath();
     ctx.fill();
 
+    ctx.fillStyle = hot ? "#ffe8a0" : "#b02020";
+    ctx.beginPath();
+    ctx.arc(tipX + tipLen * 0.55, offset, 0.09, 0, Math.PI * 2);
+    ctx.fill();
+
     if (charge > 0.5) {
-      ctx.fillStyle = `rgba(255, 200, 120, ${(charge - 0.5) * 1.2})`;
+      ctx.fillStyle = `rgba(255, 210, 140, ${(charge - 0.5) * 1.1})`;
       ctx.beginPath();
-      ctx.arc(tipX + tipLen * 0.5, offset, 0.18 + 0.1 * charge, 0, Math.PI * 2);
+      ctx.arc(tipX + tipLen * 0.4, offset, 0.2 + 0.1 * charge, 0, Math.PI * 2);
       ctx.fill();
     }
   }
@@ -319,23 +380,84 @@ function drawPanel(ctx: CanvasRenderingContext2D, left: number) {
 }
 
 function drawTransmissionNode(ctx: CanvasRenderingContext2D) {
-  ctx.fillStyle = COLOR_TX_DISH;
+  const t = performance.now() / 1000;
+
+  const pulsePhase = (t * 0.65) % 1;
+  const pulseR = TX_HEX_R + 0.1 + pulsePhase * TX_PULSE_MAX_EXTRA;
+  ctx.strokeStyle = `rgba(156, 255, 207, ${(1 - pulsePhase) * 0.45})`;
+  ctx.lineWidth = 0.1;
   ctx.beginPath();
-  ctx.arc(0, -TX_DISH_OFFSET, TX_DISH_R, Math.PI, Math.PI * 2);
-  ctx.closePath();
-  ctx.fill();
-  ctx.strokeStyle = COLOR_TX_DISH_RIM;
-  ctx.lineWidth = TX_DISH_RIM_W;
+  ctx.arc(0, 0, pulseR, 0, Math.PI * 2);
   ctx.stroke();
 
-  ctx.fillStyle = COLOR_TX_BODY;
-  ctx.fillRect(-TX_BODY_W / 2, -TX_BODY_H / 2, TX_BODY_W, TX_BODY_H);
+  for (let i = 0; i < 3; i++) {
+    const a = -Math.PI / 2 + (i * (Math.PI * 2)) / 3;
+    const ix = Math.cos(a) * TX_HEX_R;
+    const iy = Math.sin(a) * TX_HEX_R;
+    ctx.save();
+    ctx.translate(ix, iy);
+    ctx.rotate(a);
+    ctx.fillStyle = COLOR_ANTENNA;
+    ctx.fillRect(0, -TX_PYLON_W / 2, TX_PYLON_LEN, TX_PYLON_W);
+    ctx.fillStyle = COLOR_TX_GLOW;
+    ctx.beginPath();
+    ctx.arc(TX_PYLON_LEN + 0.08, 0, 0.15, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
 
-  const pulse = 0.6 + 0.4 * Math.sin(performance.now() / 400);
-  ctx.fillStyle = COLOR_TX_PULSE;
-  ctx.globalAlpha = pulse;
+  const ringRot = t * TX_RING_SPEED;
+  const segArc = (Math.PI * 2) / TX_RING_SEGMENTS - TX_RING_GAP;
+  ctx.strokeStyle = COLOR_TX_BODY;
+  ctx.lineWidth = TX_RING_W;
+  ctx.lineCap = "round";
+  for (let i = 0; i < TX_RING_SEGMENTS; i++) {
+    const segStart =
+      ringRot + (i * Math.PI * 2) / TX_RING_SEGMENTS + TX_RING_GAP / 2;
+    const segEnd = segStart + segArc;
+    ctx.beginPath();
+    ctx.arc(0, 0, TX_RING_R, segStart, segEnd);
+    ctx.stroke();
+    ctx.fillStyle = COLOR_TX_GLOW;
+    ctx.beginPath();
+    ctx.arc(Math.cos(segStart) * TX_RING_R, Math.sin(segStart) * TX_RING_R, 0.1, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
   ctx.beginPath();
-  ctx.arc(0, 0, TX_PULSE_R, 0, Math.PI * 2);
+  for (let i = 0; i < 6; i++) {
+    const a = -Math.PI / 2 + (i * Math.PI * 2) / 6;
+    const x = Math.cos(a) * TX_HEX_R;
+    const y = Math.sin(a) * TX_HEX_R;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fillStyle = COLOR_TX_CORE_BG;
   ctx.fill();
-  ctx.globalAlpha = 1;
+  ctx.strokeStyle = COLOR_TX_BODY;
+  ctx.lineWidth = 0.12;
+  ctx.stroke();
+
+  ctx.strokeStyle = "rgba(74, 224, 160, 0.6)";
+  ctx.lineWidth = 0.06;
+  ctx.beginPath();
+  ctx.arc(0, 0, TX_CORE_R * 1.5, 0, Math.PI * 2);
+  ctx.stroke();
+
+  const pulse = 0.5 + 0.5 * Math.sin(t * 2.5);
+  const glowR = TX_CORE_R + 0.15 * pulse;
+  const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, glowR);
+  grad.addColorStop(0, "rgba(232, 255, 245, 0.95)");
+  grad.addColorStop(0.45, "rgba(156, 255, 207, 0.7)");
+  grad.addColorStop(1, "rgba(74, 224, 160, 0)");
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(0, 0, glowR, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = COLOR_TX_BRIGHT;
+  ctx.beginPath();
+  ctx.arc(0, 0, 0.14 + 0.04 * pulse, 0, Math.PI * 2);
+  ctx.fill();
 }

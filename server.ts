@@ -4,7 +4,7 @@ const LEVELS_FILE = "levels.json";
 
 const server = Bun.serve({
   port: 3000,
-  development: { hmr: true, console: true },
+  development: true,
   routes: {
     "/": index,
     "/api/levels": {
