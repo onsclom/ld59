@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "bun --hot server.ts",
-    "build": "bun build ./src/index.html --outdir=./dist --minify --define process.env.NODE_ENV='\"production\"'",
+    "build": "bun build ./src/index.html --outdir=./dist --minify --define process.env.NODE_ENV='\"production\"' && cp cover.png dist/cover.png",
     "preview": "bunx serve dist"
   },
   "devDependencies": {
