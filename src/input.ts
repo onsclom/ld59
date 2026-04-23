@@ -103,10 +103,9 @@ export function registerInputListeners(canvas: HTMLCanvasElement): () => void {
     "keydown",
     (e) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (!keysDown.has(e.key)) {
-        keysJustPressed.add(e.key);
-      }
-      keysDown.add(e.key);
+      const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+      keysJustPressed.add(key);
+      keysDown.add(key);
     },
     { signal },
   );
@@ -114,8 +113,9 @@ export function registerInputListeners(canvas: HTMLCanvasElement): () => void {
   document.body.addEventListener(
     "keyup",
     (e) => {
-      keysDown.delete(e.key);
-      keysJustReleased.add(e.key);
+      const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+      keysDown.delete(key);
+      keysJustReleased.add(key);
     },
     { signal },
   );
