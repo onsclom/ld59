@@ -1,17 +1,26 @@
 let ctx: AudioContext | null = null;
 let masterGain: GainNode | null = null;
 
+if (import.meta.hot && import.meta.hot.data.audio) {
+  ctx = import.meta.hot.data.audio.ctx;
+  masterGain = import.meta.hot.data.audio.masterGain;
+}
+
 // Browsers require a user gesture before audio can play. Call `unlock()` from
 // any pointerdown/keydown handler once on startup.
 // Unlock audio on first user gesture.
+const unlockController = new AbortController();
 const unlockHandler = () => {
   const c = getCtx();
   if (c.state === "suspended") void c.resume();
-  window.removeEventListener("pointerdown", unlockHandler);
-  window.removeEventListener("keydown", unlockHandler);
+  unlockController.abort();
 };
-window.addEventListener("pointerdown", unlockHandler);
-window.addEventListener("keydown", unlockHandler);
+window.addEventListener("pointerdown", unlockHandler, {
+  signal: unlockController.signal,
+});
+window.addEventListener("keydown", unlockHandler, {
+  signal: unlockController.signal,
+});
 
 function getCtx(): AudioContext {
   if (!ctx) {
@@ -21,6 +30,14 @@ function getCtx(): AudioContext {
     masterGain.connect(ctx.destination);
   }
   return ctx;
+}
+
+if (import.meta.hot) {
+  import.meta.hot.accept();
+  import.meta.hot.dispose((data) => {
+    unlockController.abort();
+    data.audio = { ctx, masterGain };
+  });
 }
 
 function getMaster(): GainNode {

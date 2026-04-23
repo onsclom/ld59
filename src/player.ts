@@ -368,7 +368,8 @@ export function draw(
     ctx.fillRect(-hw, -hh, w, h);
   }
 
-  if (player.alive && !player.hasThrusted) drawInvulnerableSheen(ctx, w, h, hw, hh);
+  if (player.alive && !player.hasThrusted)
+    drawInvulnerableSheen(ctx, w, h, hw, hh);
 
   drawStatusRings(ctx, w, h, effects);
   drawDenyFlash(ctx, w, h, player.denyFlash);
@@ -793,8 +794,10 @@ function drawInvulnerableSheen(
   hh: number,
 ) {
   const pulse =
-    0.5 + 0.5 * Math.sin((performance.now() / INVULN_PULSE_PERIOD_MS) * Math.PI * 2);
-  const alpha = INVULN_ALPHA_MIN + (INVULN_ALPHA_MAX - INVULN_ALPHA_MIN) * pulse;
+    0.5 +
+    0.5 * Math.sin((performance.now() / INVULN_PULSE_PERIOD_MS) * Math.PI * 2);
+  const alpha =
+    INVULN_ALPHA_MIN + (INVULN_ALPHA_MAX - INVULN_ALPHA_MIN) * pulse;
 
   ctx.save();
   buildShipSilhouette(ctx, hw, hh);

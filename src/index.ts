@@ -38,7 +38,12 @@ function createInitState() {
     phase: "title" as "title" | "intro" | "playing" | "end",
   };
 }
-const state = createInitState();
+let restoredState: ReturnType<typeof createInitState> | undefined;
+if (import.meta.hot) {
+  restoredState = import.meta.hot.data.state;
+}
+const isHotReload = restoredState != null;
+const state = restoredState ?? createInitState();
 
 function serializeLevels() {
   return JSON.stringify(state.levels.map(Level.toData));
@@ -100,29 +105,36 @@ async function loadLevels(): Promise<Level.LevelData[]> {
   return (await res.json()) as Level.LevelData[];
 }
 
-loadLevels()
-  .then((data) => {
-    if (!Array.isArray(data) || data.length === 0) return;
-    state.levels = data.map(Level.fromData);
-    state.currentLevelIndex = 0;
-    state.level = state.levels[0]!;
-    Player.reset(state.player);
-    savedSnapshot = serializeLevels();
-    state.gameStartedAt = performance.now();
-  })
-  .catch((err) => console.warn("load error", err));
+if (!isHotReload) {
+  await loadLevels()
+    .then((data) => {
+      if (!Array.isArray(data) || data.length === 0) return;
+      state.levels = data.map(Level.fromData);
+      state.currentLevelIndex = 0;
+      state.level = state.levels[0]!;
+      Player.reset(state.player);
+      savedSnapshot = serializeLevels();
+      state.gameStartedAt = performance.now();
+    })
+    .catch((err) => console.warn("load error", err));
+}
 
-document.addEventListener("keydown", (e) => {
-  if ((e.metaKey || e.ctrlKey) && e.key === "s") {
-    e.preventDefault();
-    saveLevels();
-  }
-  if (!e.metaKey && !e.ctrlKey && !e.altKey && e.key === "f") {
-    e.preventDefault();
-    if (document.fullscreenElement) document.exitFullscreen();
-    else document.documentElement.requestFullscreen().catch(() => {});
-  }
-});
+const keyboardController = new AbortController();
+document.addEventListener(
+  "keydown",
+  (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+      e.preventDefault();
+      saveLevels();
+    }
+    if (!e.metaKey && !e.ctrlKey && !e.altKey && e.key === "f") {
+      e.preventDefault();
+      if (document.fullscreenElement) document.exitFullscreen();
+      else document.documentElement.requestFullscreen().catch(() => {});
+    }
+  },
+  { signal: keyboardController.signal },
+);
 
 let wasThrusting = false;
 let wasTransmitting = false;
@@ -492,7 +504,7 @@ function drawStatusHUD(
   ctx.restore();
 }
 
-startLoop(canvas, (ctx, dt) => {
+const stopLoop = startLoop(canvas, (ctx, dt) => {
   const rect = ctx.canvas.getBoundingClientRect();
   state.camera.zoom = Camera.aspectFitZoom(rect, GAME_SIZE, GAME_SIZE);
 
@@ -954,4 +966,14 @@ startLoop(canvas, (ctx, dt) => {
   Input.resetInput();
 });
 
-Input.registerInputListeners(canvas);
+const disposeInput = Input.registerInputListeners(canvas);
+
+if (import.meta.hot) {
+  import.meta.hot.accept();
+  import.meta.hot.dispose((data) => {
+    stopLoop();
+    disposeInput();
+    keyboardController.abort();
+    data.state = state;
+  });
+}
