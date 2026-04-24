@@ -4,11 +4,13 @@ import * as Edit from "./edit";
 import * as Input from "./input";
 import * as Level from "./level";
 import * as LevelIntro from "./level-intro";
+import * as LevelFile from "./level-file";
 import * as Particles from "./particles";
 import * as Player from "./player";
 import * as Satellite from "./satellite";
 import * as Sound from "./sound";
 import * as Transitions from "./transitions";
+import initialLevels from "../levels.json";
 
 const DEV_MODE =
   process.env.NODE_ENV !== "production" ||
@@ -79,44 +81,26 @@ function deleteCurrentLevel() {
 async function saveLevels() {
   if (process.env.NODE_ENV === "production") return;
   const body = serializeLevels();
-  try {
-    const res = await fetch("/api/levels", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body,
-    });
-    if (!res.ok) {
-      console.warn("save failed", res.status);
-      return;
-    }
-    savedSnapshot = body;
-  } catch (err) {
-    console.warn("save error", err);
+  const result = await LevelFile.save(state.levels.map(Level.toData));
+  if (result === "ok") savedSnapshot = body;
+  else if (result === "unsupported") {
+    console.warn(
+      "File System Access API not supported — use a Chromium-based browser to save levels",
+    );
   }
-}
-
-async function loadLevels(): Promise<Level.LevelData[]> {
-  if (process.env.NODE_ENV === "production") {
-    const mod = await import("../levels.json");
-    return mod.default as Level.LevelData[];
-  }
-  const res = await fetch("/api/levels");
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return (await res.json()) as Level.LevelData[];
 }
 
 if (!isHotReload) {
-  await loadLevels()
-    .then((data) => {
-      if (!Array.isArray(data) || data.length === 0) return;
-      state.levels = data.map(Level.fromData);
-      state.currentLevelIndex = 0;
-      state.level = state.levels[0]!;
-      Player.reset(state.player);
-      savedSnapshot = serializeLevels();
-      state.gameStartedAt = performance.now();
-    })
-    .catch((err) => console.warn("load error", err));
+  if (DEV_MODE) await LevelFile.restoreHandle();
+  const data = initialLevels as Level.LevelData[];
+  if (Array.isArray(data) && data.length > 0) {
+    state.levels = data.map(Level.fromData);
+    state.currentLevelIndex = 0;
+    state.level = state.levels[0]!;
+    Player.reset(state.player);
+    savedSnapshot = serializeLevels();
+    state.gameStartedAt = performance.now();
+  }
 }
 
 const keyboardController = new AbortController();
@@ -970,6 +954,9 @@ const disposeInput = Input.registerInputListeners(canvas);
 
 if (import.meta.hot) {
   import.meta.hot.accept();
+  import.meta.hot.accept("../levels.json", () => {
+    // editor wrote this; in-memory state is already current
+  });
   import.meta.hot.dispose((data) => {
     stopLoop();
     disposeInput();
